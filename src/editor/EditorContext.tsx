@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { api } from '../lib/api';
-import { useRender } from '../lib/useRender';
+import { useRender, type RenderError } from '../lib/useRender';
 import type { Format, NodeKind, Project, RenderState } from '../types';
 
 export type SaveState = 'saved' | 'dirty' | 'saving' | 'error';
@@ -14,7 +14,10 @@ interface EditorValue {
   select: (kind: NodeKind | null) => void;
   startRender: (format?: Format) => Promise<boolean>;
   renderStarting: boolean;
-  renderError: 'credits' | 'generic' | null;
+  renderError: RenderError | null;
+  /** big player modal over the canvas */
+  playerOpen: boolean;
+  setPlayerOpen: (open: boolean) => void;
 }
 
 const Ctx = createContext<EditorValue | null>(null);
@@ -28,19 +31,27 @@ export function EditorProvider({ initial, children }: { initial: Project; childr
   const projectRef = useRef(project);
   projectRef.current = project;
 
+  const inflight = useRef<Promise<void>>(Promise.resolve());
+
   const flush = useCallback(async () => {
     window.clearTimeout(timer.current);
+    // wait for a save that is already running, so callers see the server up to date
+    await inflight.current;
     const patch = pending.current;
     if (Object.keys(patch).length === 0) return;
     pending.current = {};
     setSaveState('saving');
-    try {
-      await api.updateProject(projectRef.current.id, patch);
-      setSaveState(Object.keys(pending.current).length ? 'dirty' : 'saved');
-    } catch {
-      pending.current = { ...patch, ...pending.current };
-      setSaveState('error');
-    }
+    const run = (async () => {
+      try {
+        await api.updateProject(projectRef.current.id, patch);
+        setSaveState(Object.keys(pending.current).length ? 'dirty' : 'saved');
+      } catch {
+        pending.current = { ...patch, ...pending.current };
+        setSaveState('error');
+      }
+    })();
+    inflight.current = run;
+    await run;
   }, []);
 
   const update = useCallback(
@@ -66,8 +77,32 @@ export function EditorProvider({ initial, children }: { initial: Project; childr
     };
   }, [flush]);
 
-  const onRender = useCallback((render: RenderState) => update({ render }), [update]);
+  const [playerOpen, setPlayerOpen] = useState(false);
+  const watching = useRef(false);
+  const onRender = useCallback(
+    (render: RenderState) => {
+      update({ render });
+      // open the finished video automatically, but only for renders started in this session
+      if (render.status === 'done' && watching.current) {
+        watching.current = false;
+        setPlayerOpen(true);
+      }
+    },
+    [update],
+  );
   const { start, starting, error } = useRender(project, onRender);
+
+  // the backend renders the SAVED project: flush pending edits first
+  const startRender = useCallback(
+    async (format?: Format) => {
+      await flush();
+      watching.current = true;
+      const ok = await start(format);
+      if (!ok) watching.current = false;
+      return ok;
+    },
+    [flush, start],
+  );
 
   const value = useMemo<EditorValue>(
     () => ({
@@ -77,11 +112,13 @@ export function EditorProvider({ initial, children }: { initial: Project; childr
       saveState,
       selected,
       select: setSelected,
-      startRender: start,
+      startRender,
       renderStarting: starting,
       renderError: error,
+      playerOpen,
+      setPlayerOpen,
     }),
-    [project, update, flush, saveState, selected, start, starting, error],
+    [project, update, flush, saveState, selected, startRender, starting, error, playerOpen],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

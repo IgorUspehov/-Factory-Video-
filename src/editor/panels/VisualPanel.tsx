@@ -1,15 +1,16 @@
-import { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, ArrowRight, Check, Film, GripVertical, Library, Trash2, Upload } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { ArrowLeft, ArrowRight, Film, GripVertical, Library, Trash2, Upload } from 'lucide-react';
 import { useEditor } from '../EditorContext';
 import { useI18n } from '../../i18n';
 import { api } from '../../lib/api';
 import { imageThumb, videoInfo } from '../../lib/media';
-import { syncTimeline, uid } from '../../lib/project';
+import { syncTimeline } from '../../lib/project';
 import { uploadsStore } from '../../lib/uploads';
-import { MOODS, NICHES, moodKey, nicheKey } from '../../lib/labels';
 import { Modal } from '../../components/Modal';
 import { Spinner } from '../../components/Spinner';
-import type { LibraryMedia, MediaItem, Mood, Niche, Project } from '../../types';
+import { MediaBrowser } from '../../components/MediaBrowser';
+import { Hint } from '../../components/Hint';
+import type { MediaItem, Project } from '../../types';
 
 const MAX_MEDIA_BYTES = 200 * 1024 * 1024;
 
@@ -17,81 +18,6 @@ function reorder(project: Project, media: MediaItem[]): Partial<Project> {
   const synced = syncTimeline(media, project.timeline);
   const index = new Map(media.map((m, i) => [m.id, i]));
   return { media, timeline: [...synced].sort((a, b) => (index.get(a.mediaId) ?? 0) - (index.get(b.mediaId) ?? 0)) };
-}
-
-function LibraryPicker({ open, onClose, onAdd }: { open: boolean; onClose: () => void; onAdd: (items: MediaItem[]) => void }) {
-  const { t } = useI18n();
-  const [items, setItems] = useState<LibraryMedia[] | null>(null);
-  const [mood, setMood] = useState<Mood | ''>('');
-  const [niche, setNiche] = useState<Niche | ''>('');
-  const [picked, setPicked] = useState<string[]>([]);
-
-  useEffect(() => {
-    if (!open) return;
-    setItems(null);
-    api
-      .libraryMedia({ mood: mood || undefined, niche: niche || undefined })
-      .then(setItems)
-      .catch(() => setItems([]));
-  }, [open, mood, niche]);
-
-  const toggle = (id: string) => setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
-
-  const confirm = () => {
-    const chosen = (items ?? []).filter((i) => picked.includes(i.id));
-    onAdd(
-      chosen.map((i) => ({ id: uid('med'), kind: i.kind, url: i.url, thumb: i.thumb, name: i.title, duration: i.duration, source: 'library' as const })),
-    );
-    setPicked([]);
-    onClose();
-  };
-
-  return (
-    <Modal open={open} onClose={onClose} title={t('visual.libraryTitle')}>
-      <div className="flex flex-wrap gap-1.5">
-        {MOODS.map((m) => (
-          <button key={m} className={`chip ${mood === m ? 'chip-active' : ''}`} onClick={() => setMood(mood === m ? '' : m)}>
-            {t(moodKey[m])}
-          </button>
-        ))}
-      </div>
-      <div className="mt-2 flex flex-wrap gap-1.5">
-        {NICHES.map((n) => (
-          <button key={n} className={`chip ${niche === n ? 'chip-active' : ''}`} onClick={() => setNiche(niche === n ? '' : n)}>
-            {t(nicheKey[n])}
-          </button>
-        ))}
-      </div>
-      <div className="mt-4 grid max-h-[46vh] grid-cols-3 gap-2 overflow-y-auto scrollbar-thin">
-        {items === null ? (
-          <div className="col-span-3 py-8 text-center">
-            <Spinner />
-          </div>
-        ) : items.length === 0 ? (
-          <p className="col-span-3 py-6 text-center text-sm text-muted">{t('common.nothingFound')}</p>
-        ) : (
-          items.map((i) => (
-            <button
-              key={i.id}
-              onClick={() => toggle(i.id)}
-              className={`relative aspect-square overflow-hidden rounded-xl border-2 ${picked.includes(i.id) ? 'border-accent shadow-glow-sm' : 'border-transparent'}`}
-            >
-              <img src={i.thumb} alt={i.title} className="h-full w-full object-cover" loading="lazy" />
-              {i.kind === 'video' && <Film size={14} className="absolute left-1.5 top-1.5 text-white drop-shadow" />}
-              {picked.includes(i.id) && (
-                <span className="absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-accent">
-                  <Check size={12} />
-                </span>
-              )}
-            </button>
-          ))
-        )}
-      </div>
-      <button className="btn-primary mt-4 w-full" disabled={picked.length === 0} onClick={confirm}>
-        {t('visual.addSelected', { n: picked.length })} →
-      </button>
-    </Modal>
-  );
 }
 
 export function VisualPanel() {
@@ -149,6 +75,7 @@ export function VisualPanel() {
 
   return (
     <div className="space-y-4">
+      <Hint>{t('visual.intro')}</Hint>
       <div
         onDragOver={(e) => {
           if (e.dataTransfer.types.includes('Files')) {
@@ -170,10 +97,10 @@ export function VisualPanel() {
         <p className="mt-3 text-sm font-medium">{t('visual.drop')}</p>
         <p className="mt-1 text-xs text-muted">{t('visual.limits')}</p>
         <div className="mt-4 flex flex-wrap justify-center gap-2">
-          <button className="btn-secondary btn-sm" disabled={busy} onClick={() => inputRef.current?.click()}>
+          <button className="btn-secondary btn-sm" disabled={busy} onClick={() => inputRef.current?.click()} title={t('visual.chooseHint')}>
             <Upload size={14} /> {t('visual.choose')}
           </button>
-          <button className="btn-secondary btn-sm" onClick={() => setPicker(true)}>
+          <button className="btn-primary btn-sm" onClick={() => setPicker(true)} title={t('visual.libraryHint')}>
             <Library size={14} /> {t('visual.library')}
           </button>
         </div>
@@ -229,7 +156,17 @@ export function VisualPanel() {
         </>
       )}
 
-      <LibraryPicker open={picker} onClose={() => setPicker(false)} onAdd={add} />
+      <Modal open={picker} onClose={() => setPicker(false)} title={t('visual.libraryTitle')} size="lg">
+        <MediaBrowser
+          mode="pick"
+          format={project.format}
+          initialNiche={project.goal === 'clip' ? 'music' : undefined}
+          onAdd={(items) => {
+            add(items);
+            setPicker(false);
+          }}
+        />
+      </Modal>
     </div>
   );
 }

@@ -10,6 +10,7 @@ import { MOODS, moodKey } from '../../lib/labels';
 import { Waveform } from '../../components/Waveform';
 import { Spinner } from '../../components/Spinner';
 import { useAudioPreview } from '../../lib/useAudioPreview';
+import { Hint } from '../../components/Hint';
 import type { LibraryTrack, Mood } from '../../types';
 
 type Tab = 'upload' | 'library' | 'none';
@@ -87,6 +88,7 @@ export function AudioPanel() {
 
   return (
     <div className="space-y-5">
+      <Hint>{t('audio.intro')}</Hint>
       {a && a.source !== 'none' && (
         <div className="rounded-2xl border border-accent/40 bg-bg p-4">
           <div className="flex items-center gap-3">
@@ -104,7 +106,7 @@ export function AudioPanel() {
                 {a.bpm ? ` · ${a.bpm} BPM · ${t('audio.beats', { n: a.beats.length })}` : ''}
               </div>
             </div>
-            <button className="btn-ghost p-2" onClick={() => update({ audio: null })} aria-label={t('common.remove')}>
+            <button className="btn-ghost p-2" onClick={() => update({ audio: null })} aria-label={t('common.remove')} title={t('audio.removeHint')}>
               <Trash2 size={16} />
             </button>
           </div>
@@ -117,15 +119,16 @@ export function AudioPanel() {
       <div className="grid grid-cols-3 gap-1 rounded-xl border border-line bg-bg p-1">
         {(
           [
-            ['upload', Upload, 'audio.tabs.upload'],
-            ['library', Library, 'audio.tabs.library'],
-            ['none', VolumeX, 'audio.tabs.none'],
+            ['upload', Upload, 'audio.tabs.upload', 'audio.tabHints.upload'],
+            ['library', Library, 'audio.tabs.library', 'audio.tabHints.library'],
+            ['none', VolumeX, 'audio.tabs.none', 'audio.tabHints.none'],
           ] as const
-        ).map(([id, Icon, label]) => (
+        ).map(([id, Icon, label, hint]) => (
           <button
             key={id}
+            title={t(hint)}
             onClick={() => setTab(id)}
-            className={`flex items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-xs font-semibold transition ${
+            className={`flex min-h-[44px] items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-[13px] font-semibold transition ${
               tab === id ? 'bg-accent/15 text-accent-light' : 'text-muted hover:text-white'
             }`}
           >
@@ -138,7 +141,10 @@ export function AudioPanel() {
         <div className="space-y-3">
           <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-line p-3 text-sm">
             <input type="checkbox" className="mt-0.5 h-4 w-4 accent-[#FF6A1A]" checked={rights} onChange={(e) => setRights(e.target.checked)} />
-            <span>{t('audio.rights')}</span>
+            <span>
+              <span className="block font-medium">{t('audio.rights')}</span>
+              <span className="block text-[13px] text-muted">{t('audio.rightsHint')}</span>
+            </span>
           </label>
           <div
             onDragOver={(e) => e.preventDefault()}
@@ -200,7 +206,7 @@ export function AudioPanel() {
                       {t(moodKey[tr.mood])} · {tr.bpm} BPM · {formatClock(tr.duration)}
                     </div>
                   </div>
-                  <button className="btn-secondary btn-sm" disabled={busy || a?.id === tr.id} onClick={() => void pickTrack(tr)}>
+                  <button className="btn-secondary btn-sm" disabled={busy || a?.id === tr.id} onClick={() => void pickTrack(tr)} title={t('audio.useHint')}>
                     {a?.id === tr.id ? t('common.selected') : t('common.use')}
                   </button>
                 </li>

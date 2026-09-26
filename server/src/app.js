@@ -11,7 +11,7 @@ import { login, publicUser, register, requireAuth } from './auth.js';
 import { storage } from './storage/index.js';
 import { fetchRemote, probe } from './media.js';
 import { analyzeAudio } from './analyze.js';
-import { listAudio, listMedia, MOODS, NICHES } from './library.js';
+import { listAudio, listMedia, MOODS, NICHES, ORIENTATIONS } from './library.js';
 import { libraryTracks } from './libraryData.js';
 import { suggest } from './assistant.js';
 import { DIMENSIONS, plannedDuration } from './render/pipeline.js';
@@ -19,10 +19,11 @@ import { DIMENSIONS, plannedDuration } from './render/pipeline.js';
 const AUDIO_EXT = new Set(['.mp3', '.wav', '.m4a']);
 const IMAGE_EXT = new Set(['.jpg', '.jpeg', '.png', '.webp']);
 const VIDEO_EXT = new Set(['.mp4', '.mov', '.webm', '.m4v']);
-const PROJECT_FIELDS = ['title', 'goal', 'format', 'mood', 'textMode', 'nodes', 'edges', 'audio', 'media', 'lyrics', 'style', 'timeline', 'render'];
+const PROJECT_FIELDS = ['title', 'goal', 'format', 'mood', 'textMode', 'lengthMode', 'nodes', 'edges', 'audio', 'media', 'lyrics', 'style', 'timeline', 'render'];
 
 const pick = (obj, keys) => Object.fromEntries(keys.filter((k) => obj?.[k] !== undefined).map((k) => [k, obj[k]]));
 const publicProject = ({ userId: _u, ...p }) => p;
+const validLengthMode = (m) => m === 'track' || m === 'timeline' || (typeof m === 'number' && m > 0 && m <= limits.maxVideoSeconds);
 
 export function createApp({ db, queue }) {
   const app = express();
@@ -87,6 +88,7 @@ export function createApp({ db, queue }) {
   app.post('/api/projects', auth, wrap(async (req, res) => {
     const draft = pick(req.body, PROJECT_FIELDS);
     if (typeof draft.title !== 'string' || !DIMENSIONS[draft.format]) throw new HttpError(400, 'invalid_project');
+    if (draft.lengthMode !== undefined && !validLengthMode(draft.lengthMode)) throw new HttpError(400, 'invalid_length_mode');
     const now = new Date().toISOString();
     const project = { ...draft, id: `prj_${randomUUID()}`, userId: req.user.id, createdAt: now, updatedAt: now };
     await db.insert('projects', project);
@@ -97,6 +99,7 @@ export function createApp({ db, queue }) {
     const p = ownProject(req);
     const patch = pick(req.body, PROJECT_FIELDS);
     if (patch.format && !DIMENSIONS[patch.format]) throw new HttpError(400, 'invalid_format');
+    if (patch.lengthMode !== undefined && !validLengthMode(patch.lengthMode)) throw new HttpError(400, 'invalid_length_mode');
     res.json(publicProject(await db.update('projects', p.id, { ...patch, updatedAt: new Date().toISOString() })));
   }));
   app.delete('/api/projects/:id', auth, wrap(async (req, res) => {
@@ -190,10 +193,15 @@ export function createApp({ db, queue }) {
     res.json(listAudio({ mood: filterParam(req.query.mood, MOODS), niche: filterParam(req.query.niche, NICHES) })),
   );
   app.get('/api/library/media', auth, wrap(async (req, res) => {
+    const page = Math.min(50, Math.max(1, Number.parseInt(String(req.query.page ?? '1'), 10) || 1));
     const { items, source } = await listMedia({
+      q: typeof req.query.q === 'string' ? req.query.q : '',
       mood: filterParam(req.query.mood, MOODS),
       niche: filterParam(req.query.niche, NICHES),
       kind: filterParam(req.query.kind, ['image', 'video']),
+      orientation: filterParam(req.query.orientation, ORIENTATIONS),
+      lang: filterParam(req.query.lang, ['de', 'en', 'ru']),
+      page,
     });
     res.set('X-Library-Source', source).json(items);
   }));

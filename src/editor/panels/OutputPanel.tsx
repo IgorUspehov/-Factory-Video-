@@ -9,17 +9,20 @@ import { copyText } from '../../lib/share';
 import { useCheckout } from '../../lib/useCheckout';
 import { renderCost } from '../../config/pricing';
 import { FORMATS, formatKey, statusKey } from '../../lib/labels';
-import { formatClock, projectDuration } from '../../lib/project';
+import { MAX_VIDEO_SECONDS, projectDuration } from '../../lib/project';
+import { LengthPicker } from '../LengthPicker';
+import { Hint } from '../../components/Hint';
 import { RenderPlayer } from '../../components/RenderPlayer';
 import { WatermarkNotice } from '../../components/WatermarkNotice';
 
 export function OutputPanel() {
-  const { project, update, startRender, renderStarting, renderError } = useEditor();
+  const { project, update, startRender, renderStarting, renderError, setPlayerOpen } = useEditor();
   const { user } = useAuth();
   const { t, formatDate } = useI18n();
   const { checkout, busy } = useCheckout();
   const [copied, setCopied] = useState(false);
   const duration = projectDuration(project);
+  const tooLong = duration > MAX_VIDEO_SECONDS;
   const cost = renderCost(duration || 15);
   const credits = user?.credits ?? 0;
   const enough = credits >= cost;
@@ -54,28 +57,32 @@ export function OutputPanel() {
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-2 text-center">
-        <div className="rounded-xl border border-line p-3">
-          <div className="label-caps">{t('output.length')}</div>
-          <div className="mt-1 font-display text-lg font-extrabold tabular-nums">{formatClock(duration)}</div>
-        </div>
-        <div className="rounded-xl border border-accent/50 p-3 shadow-glow-sm">
+      <LengthPicker />
+
+      <div className="grid grid-cols-2 gap-2 text-center">
+        <div className="rounded-xl border border-accent/50 p-3 shadow-glow-sm" title={t('output.costHint')}>
           <div className="label-caps">{t('output.cost')}</div>
-          <div className="mt-1 inline-flex items-center gap-1 font-display text-lg font-extrabold tabular-nums">
-            <Zap size={14} className="fill-accent text-accent" />
+          <div className="mt-1 inline-flex items-center gap-1 font-display text-xl font-extrabold tabular-nums">
+            <Zap size={15} className="fill-accent text-accent" />
             {cost}
           </div>
         </div>
-        <div className="rounded-xl border border-line p-3">
+        <div className="rounded-xl border border-line p-3" title={t('output.balanceHint')}>
           <div className="label-caps">{t('output.balance')}</div>
-          <div className="mt-1 font-display text-lg font-extrabold tabular-nums">{credits}</div>
+          <div className="mt-1 font-display text-xl font-extrabold tabular-nums">{credits}</div>
         </div>
       </div>
+      <Hint>{t('output.costExplain')}</Hint>
 
       {user?.plan === 'free' && <WatermarkNotice compact />}
 
-      <button className="btn-primary w-full py-3.5" disabled={!enough || running || renderStarting || empty} onClick={() => void startRender()}>
-        <Play size={16} className="fill-white" /> {t('render.start')}
+      <button
+        className="btn-primary w-full py-3.5 text-base"
+        disabled={!enough || running || renderStarting || empty || tooLong}
+        onClick={() => void startRender()}
+        title={t('steps.buildNowHint')}
+      >
+        <Play size={16} className="fill-white" /> {t('steps.buildNow')}
       </button>
       {empty && <p className="text-center text-xs text-muted">{t('output.needMaterial')}</p>}
       {(!enough || renderError === 'credits') && (
@@ -87,6 +94,7 @@ export function OutputPanel() {
         </div>
       )}
       {renderError === 'generic' && <p className="text-sm text-red-300">{t('auth.errors.generic')}</p>}
+      {renderError === 'too_long' && <p className="text-sm text-red-300">{t('length.tooLongServer')}</p>}
 
       {r.status !== 'idle' && (
         <div className="space-y-3">
@@ -100,6 +108,9 @@ export function OutputPanel() {
           <RenderPlayer render={r} format={r.format ?? project.format} className={project.format === '9:16' ? 'max-w-[220px]' : ''} />
           {r.status === 'done' && r.url && (
             <>
+              <button className="btn-primary w-full" onClick={() => setPlayerOpen(true)} title={t('steps.watchHint')}>
+                <Play size={16} className="fill-white" /> {t('steps.watch')}
+              </button>
               <div className="grid grid-cols-2 gap-2">
                 <a className="btn-primary btn-sm" href={r.url} download={`${project.title}.mp4`} target="_blank" rel="noreferrer">
                   <Download size={14} /> {t('output.download')}

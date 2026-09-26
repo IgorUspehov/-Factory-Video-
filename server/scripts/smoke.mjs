@@ -10,6 +10,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { FFMPEG, probe, run } from '../src/media.js';
+import { plannedDuration, renderCost } from '../src/shared/timeline.js';
+import { startFakePexels, requests as pexelsRequests } from './fake-pexels.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = 18000 + Math.floor(Math.random() * 1000);
@@ -52,10 +54,11 @@ function rssTreeMb(pid) {
   return total / 1024;
 }
 
-// ---------------------------------------------------------------- server
+// ---------------------------------------------------------------- fake Pexels + server
+const pexels = await startFakePexels(0);
 const server = spawn(process.execPath, ['src/index.js'], {
   cwd: root,
-  env: { ...process.env, PORT: String(PORT), DATA_DIR: dataDir, JWT_SECRET: 'smoke-secret', PUBLIC_URL: BASE, FRONTEND_ORIGIN: 'http://localhost:5173', PEXELS_API_KEY: '' },
+  env: { ...process.env, PORT: String(PORT), DATA_DIR: dataDir, JWT_SECRET: 'smoke-secret', PUBLIC_URL: BASE, FRONTEND_ORIGIN: 'http://localhost:5173', PEXELS_API_KEY: 'smoke-key', PEXELS_API_BASE: `http://127.0.0.1:${pexels.port}` },
   stdio: ['ignore', 'pipe', 'pipe'],
 });
 let serverLog = '';
@@ -188,7 +191,7 @@ try {
     { id: 'c4', mediaId: media[2].id, duration: 2 },
   ];
   const project = {
-    title: 'Smoke', goal: 'clip', format: '9:16', mood: 'energetic', textMode: 'lyrics', nodes: [], edges: [],
+    title: 'Smoke', goal: 'clip', lengthMode: 'timeline', format: '9:16', mood: 'energetic', textMode: 'lyrics', nodes: [], edges: [],
     audio: { source: 'upload', id: au.data.id, name: 'beat120.mp3', url: au.data.url, duration: an.data.duration, bpm: an.data.bpm, beats: an.data.beats, peaks: an.data.peaks, rightsConfirmed: true },
     media: [media[0], media[1], media[2], media[10]],
     lyrics: [
@@ -249,6 +252,25 @@ try {
   sampling = false;
   const perfPeak = peakMb;
 
+  // music video default: length = whole track (no lengthMode → 'track' for goal 'clip'); frontend and backend share the formula
+  const { lengthMode: _lm, ...clipDefaults } = project;
+  const trackProject = { ...clipDefaults, title: 'Clip = track', media: media.slice(0, 3), timeline: timeline.filter((c) => media.slice(0, 3).some((m) => m.id === c.mediaId)) };
+  const tp = await api('POST', '/api/projects', { token, json: trackProject });
+  const expectedLen = an.data.duration;
+  check('clip default length = track (shared formula)', Math.abs(plannedDuration(tp.data) - expectedLen) < 0.01, `planned ${plannedDuration(tp.data)} s, track ${expectedLen} s`);
+  const trackRes = await renderAndCheck(token, tp.data.id, '9:16', expectedLen, 'clip = track 9:16');
+  const trackJob = trackRes.jobId && (await api('GET', '/api/billing/history', { token })).data.find((h) => h.id === trackRes.jobId);
+  check('cost backend = frontend formula', trackJob?.credits === renderCost(plannedDuration(tp.data)), `backend ${trackJob?.credits}, shared ${renderCost(plannedDuration(tp.data))}`);
+
+  // longer than 300 s → clear 400
+  const longTrack = await api('POST', '/api/projects', { token, json: { ...trackProject, title: 'Too long', audio: { ...trackProject.audio, duration: 420 } } });
+  const r400 = await api('POST', '/api/render', { token, json: { projectId: longTrack.data.id, format: '9:16' } });
+  check('track longer than 300 s → 400 too_long', r400.status === 400 && r400.data.error === 'too_long', JSON.stringify(r400.data));
+  await api('PATCH', `/api/projects/${longTrack.data.id}`, { token, json: { lengthMode: 300 } });
+  const trimmed = await api('GET', `/api/projects/${longTrack.data.id}`, { token });
+  check('trimmed to 300 s is accepted by the length rule', plannedDuration(trimmed.data) === 300);
+  check('invalid lengthMode rejected', (await api('PATCH', `/api/projects/${longTrack.data.id}`, { token, json: { lengthMode: 9999 } })).status === 400);
+
   // 60 short clips, same 30 s: memory must not grow with the clip count
   const manyTimeline = Array.from({ length: 60 }, (_, i) => ({ id: `m${i}`, mediaId: media[i % 10].id, duration: 0.5 }));
   const many = await api('POST', '/api/projects', {
@@ -263,24 +285,37 @@ try {
 
   // ---------------------------------------------------------------- credits
   const credits = (await api('GET', '/api/me', { token })).data.credits;
-  check('credits deducted (6 renders × 1)', credits === 4, `credits ${credits}`);
+  check('credits deducted (6 × 1 + 1 × 2)', credits === 2, `credits ${credits}`);
   const long = await api('POST', '/api/projects', {
     token,
     json: { ...project, title: 'Too expensive', timeline: Array.from({ length: 10 }, (_, i) => ({ id: `x${i}`, mediaId: media[i % 10].id, duration: 30 })), media: media.slice(0, 10) },
   });
   const r402 = await api('POST', '/api/render', { token, json: { projectId: long.data.id, format: '9:16' } });
   check('render with insufficient credits → 402', r402.status === 402 && r402.data.error === 'insufficient_credits', JSON.stringify(r402.data));
-  check('credits unchanged after 402', (await api('GET', '/api/me', { token })).data.credits === 4);
+  check('credits unchanged after 402', (await api('GET', '/api/me', { token })).data.credits === 2);
 
   // ---------------------------------------------------------------- misc endpoints
   const hist = await api('GET', '/api/billing/history', { token });
-  check('billing history has 6 renders', hist.data.length === 6 && hist.data.every((h) => h.status === 'done'));
+  check('billing history has 7 renders', hist.data.length === 7 && hist.data.every((h) => h.status === 'done'));
   check('billing checkout → 501', (await api('POST', '/api/billing/checkout', { token, json: { product: 'pro' } })).status === 501);
   check('billing portal → 501', (await api('GET', '/api/billing/portal', { token })).status === 501);
   const lib = await api('GET', '/api/library/audio?mood=calm', { token });
   check('library audio mood filter', lib.data.length === 2 && lib.data.every((t) => t.mood === 'calm'));
-  const libm = await api('GET', '/api/library/media?niche=music', { token });
-  check('library media without Pexels key → static list', libm.headers.get('x-library-source') === 'static' && libm.data.length > 0 && libm.data.every((m) => m.niche === 'music'));
+  pexelsRequests.length = 0;
+  const s1 = await api('GET', `/api/library/media?q=${encodeURIComponent('singer stage')}&orientation=portrait&lang=ru&page=1`, { token });
+  const sent = pexelsRequests.find((r) => r.path === '/v1/search');
+  check('Pexels search: results', s1.headers.get('x-library-source') === 'pexels' && s1.data.length > 0, `${s1.data.length} items`);
+  check('Pexels search: query as typed + locale + orientation + key', sent?.query.query === 'singer stage' && sent?.query.locale === 'ru-RU' && sent?.query.orientation === 'portrait' && sent?.auth === 'smoke-key', JSON.stringify(sent?.query));
+  check('Pexels search: photos and videos with credit', s1.data.some((i) => i.kind === 'image') && s1.data.some((i) => i.kind === 'video') && s1.data.every((i) => i.credit?.name && i.credit?.source === 'Pexels'));
+  const s2 = await api('GET', `/api/library/media?q=singer&page=2`, { token });
+  const s1b = await api('GET', `/api/library/media?q=singer&page=1`, { token });
+  check('Pexels paging: page 2 differs from page 1', s2.data.length > 0 && !s2.data.some((i) => s1b.data.some((j) => j.id === i.id)));
+  check('Pexels paging: past the end → []', (await api('GET', `/api/library/media?q=singer&page=9`, { token })).data.length === 0);
+  const ids = s1.data.map((i) => i.id);
+  check('Pexels results: unique ids', new Set(ids).size === ids.length);
+  const chips = await api('GET', '/api/library/media?niche=music&mood=energetic&kind=image', { token });
+  const chipReq = pexelsRequests.filter((r) => r.path === '/v1/search').at(-1);
+  check('chips → English query, photos only', chipReq?.query.query === 'musician on stage energetic' && chipReq?.query.locale === 'en-US' && chips.data.every((i) => i.kind === 'image'), JSON.stringify(chipReq?.query));
   const asst = await api('POST', '/api/assistant', { token, json: { projectId: pid, message: 'Что дальше?', lang: 'ru', context: {} } });
   check('assistant ru', /[а-я]/i.test(asst.data.suggestion ?? ''), (asst.data.suggestion ?? '').slice(0, 60));
   check('DELETE project', (await api('DELETE', `/api/projects/${long.data.id}`, { token })).status === 200);
@@ -301,6 +336,7 @@ try {
   check('smoke script', false, err.stack);
 } finally {
   clearInterval(sampler);
+  pexels.server.close();
   server.kill('SIGTERM');
   await new Promise((r) => setTimeout(r, 500));
   await rm(work, { recursive: true, force: true });

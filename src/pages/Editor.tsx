@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   addEdge,
@@ -21,6 +21,7 @@ import '@xyflow/react/dist/style.css';
 import {
   ArrowLeft,
   Check,
+  ChevronDown,
   CloudOff,
   Download,
   FolderOpen,
@@ -50,6 +51,8 @@ import { StylePanel } from '../editor/panels/StylePanel';
 import { MontagePanel } from '../editor/panels/MontagePanel';
 import { OutputPanel } from '../editor/panels/OutputPanel';
 import { AssistantPanel } from '../editor/AssistantPanel';
+import { NextSteps } from '../editor/NextSteps';
+import { PlayerModal } from '../editor/PlayerModal';
 import { Spinner } from '../components/Spinner';
 import type { FlowEdgeData, NodeKind, Project } from '../types';
 
@@ -74,16 +77,38 @@ const panels: Record<NodeKind, () => JSX.Element> = {
 };
 
 type NavId = 'projects' | 'canvas' | 'materials' | 'audio' | 'brand' | 'export';
-const NAV: { id: NavId; icon: LucideIcon; label: TKey; node?: NodeKind }[] = [
-  { id: 'projects', icon: FolderOpen, label: 'editor.nav.projects' },
-  { id: 'canvas', icon: Workflow, label: 'editor.nav.canvas' },
-  { id: 'materials', icon: Images, label: 'editor.nav.materials', node: 'visual' },
-  { id: 'audio', icon: Music, label: 'editor.nav.audio', node: 'audio' },
-  { id: 'brand', icon: Palette, label: 'editor.nav.brand', node: 'style' },
-  { id: 'export', icon: Download, label: 'editor.nav.export' },
+interface NavItem {
+  id: NavId;
+  icon: LucideIcon;
+  label: TKey;
+  hint: TKey;
+  node?: NodeKind;
+}
+const NAV: NavItem[] = [
+  { id: 'projects', icon: FolderOpen, label: 'editor.nav.projects', hint: 'editor.navHint.projects' },
+  { id: 'canvas', icon: Workflow, label: 'editor.nav.canvas', hint: 'editor.navHint.canvas' },
+  { id: 'audio', icon: Music, label: 'editor.nav.audio', hint: 'editor.navHint.audio', node: 'audio' },
+  { id: 'materials', icon: Images, label: 'editor.nav.materials', hint: 'editor.navHint.materials', node: 'visual' },
+  { id: 'export', icon: Download, label: 'editor.nav.export', hint: 'editor.navHint.export' },
 ];
+/** rarely needed: behind "Advanced" */
+const NAV_ADVANCED: NavItem[] = [{ id: 'brand', icon: Palette, label: 'editor.nav.brand', hint: 'editor.navHint.brand', node: 'style' }];
+
+const PANEL_KEY = 'fv_panel_width';
+const PANEL_MIN = 380;
+const clampPanel = (w: number) => Math.round(Math.min(Math.max(w, PANEL_MIN), Math.max(PANEL_MIN, window.innerWidth * 0.6)));
+function initialPanelWidth() {
+  try {
+    const saved = Number(localStorage.getItem(PANEL_KEY));
+    if (saved > 0) return clampPanel(saved);
+  } catch {
+    /* storage unavailable */
+  }
+  return clampPanel(window.innerWidth * 0.33);
+}
 
 const MOBILE_COLS = 2;
+const DESKTOP_COLS = 3;
 const isNarrow = () => window.innerWidth < 768;
 
 function Canvas() {
@@ -126,7 +151,7 @@ function Canvas() {
   );
 
   const arrange = () => {
-    const laid = autoLayout(project.nodes, project.edges, isNarrow() ? MOBILE_COLS : Infinity);
+    const laid = autoLayout(project.nodes, project.edges, isNarrow() ? MOBILE_COLS : DESKTOP_COLS);
     update({ nodes: laid });
     setNodes((ns) => ns.map((n) => ({ ...n, position: laid.find((l) => l.id === n.id)?.position ?? n.position })));
     window.setTimeout(() => void fitView({ padding: 0.2, duration: 500 }), 50);
@@ -168,7 +193,7 @@ function Canvas() {
         />
         <Controls showInteractive={false} position="bottom-left" />
       </ReactFlow>
-      <button className="btn-secondary btn-sm absolute right-3 top-3 z-10 bg-card/90 backdrop-blur" onClick={arrange}>
+      <button className="btn-secondary btn-sm absolute bottom-3 left-14 z-10 min-h-[40px] bg-card/90 backdrop-blur" onClick={arrange} title={t('editor.arrangeHint')}>
         <LayoutGrid size={14} /> {t('editor.arrange')}
       </button>
     </div>
@@ -181,8 +206,38 @@ function Workspace() {
   const navigate = useNavigate();
   const { fitView } = useReactFlow();
   const [assistant, setAssistant] = useState(false);
+  const [advancedNav, setAdvancedNav] = useState(false);
+  const [panelWidth, setPanelWidth] = useState(initialPanelWidth);
   const Panel = selected ? panels[selected] : null;
   const PanelIcon = selected ? nodeIcon[selected] : null;
+
+  useEffect(() => {
+    const onResize = () => setPanelWidth((w) => clampPanel(w));
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  const startResize = (e: ReactPointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const handle = e.currentTarget;
+    handle.setPointerCapture(e.pointerId);
+    let width = panelWidth;
+    const move = (ev: PointerEvent) => {
+      width = clampPanel(window.innerWidth - ev.clientX);
+      setPanelWidth(width);
+    };
+    const up = () => {
+      handle.removeEventListener('pointermove', move);
+      handle.removeEventListener('pointerup', up);
+      try {
+        localStorage.setItem(PANEL_KEY, String(width));
+      } catch {
+        /* storage unavailable */
+      }
+    };
+    handle.addEventListener('pointermove', move);
+    handle.addEventListener('pointerup', up);
+  };
 
   const nav = (id: NavId, node?: NodeKind) => {
     if (id === 'projects') navigate('/projects');
@@ -202,11 +257,25 @@ function Workspace() {
   const saveIcon =
     saveState === 'saving' ? <Loader2 size={13} className="animate-spin" /> : saveState === 'error' ? <CloudOff size={13} /> : saveState === 'saved' ? <Check size={13} /> : null;
 
+  const navButton = (n: NavItem) => (
+    <button
+      key={n.id}
+      onClick={() => nav(n.id, n.node)}
+      title={t(n.hint)}
+      className={`flex min-h-[44px] items-center gap-3 rounded-xl px-3 py-2.5 text-[15px] transition ${
+        activeNav === n.id ? 'bg-accent/10 text-white shadow-glow-sm' : 'text-muted hover:bg-white/5 hover:text-white'
+      }`}
+    >
+      <n.icon size={18} className={`shrink-0 ${activeNav === n.id ? 'text-accent-light' : ''}`} />
+      <span className="hidden xl:inline">{t(n.label)}</span>
+    </button>
+  );
+
   return (
     <div className="flex h-[calc(100dvh-4rem)] flex-col">
       {/* toolbar */}
       <div className="flex h-14 shrink-0 items-center gap-2 border-b border-line bg-card/60 px-3 sm:px-4">
-        <Link to="/projects" className="btn-ghost p-2 md:hidden" aria-label={t('editor.nav.projects')}>
+        <Link to="/projects" className="btn-ghost p-2 md:hidden" aria-label={t('editor.nav.projects')} title={t('editor.navHint.projects')}>
           <ArrowLeft size={18} />
         </Link>
         <input
@@ -214,22 +283,23 @@ function Workspace() {
           value={project.title}
           onChange={(e) => update({ title: e.target.value })}
           aria-label={t('editor.title')}
+          title={t('editor.titleHint')}
         />
-        <span className={`hidden items-center gap-1 text-xs sm:flex ${saveState === 'error' ? 'text-red-300' : 'text-muted'}`}>
+        <span className={`hidden items-center gap-1 text-xs sm:flex ${saveState === 'error' ? 'text-red-300' : 'text-muted'}`} title={t('editor.autosaveHint')}>
           {saveIcon}
           {t(`editor.save.${saveState}`)}
         </span>
         <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
-          <button className="btn-secondary btn-sm" onClick={() => void save()} disabled={saveState === 'saved' || saveState === 'saving'}>
+          <button className="btn-secondary btn-sm" onClick={() => void save()} disabled={saveState === 'saved' || saveState === 'saving'} title={t('editor.saveHint')}>
             <Save size={14} />
             <span className="hidden sm:inline">{t('editor.saveBtn')}</span>
           </button>
-          <button className={`btn-secondary btn-sm ${assistant ? 'border-accent/70' : ''}`} onClick={() => setAssistant((v) => !v)}>
+          <button className={`btn-secondary btn-sm ${assistant ? 'border-accent/70' : ''}`} onClick={() => setAssistant((v) => !v)} title={t('assistant.subtitle')}>
             <Sparkles size={14} className="text-accent-light" />
             <span className="hidden sm:inline">{t('assistant.title')}</span>
           </button>
-          <button className="btn-primary btn-sm" onClick={() => void run()} disabled={renderStarting}>
-            <span className="hidden sm:inline">{t('editor.run')}</span>
+          <button className="btn-primary btn-sm" onClick={() => void run()} disabled={renderStarting} title={t('steps.buildNowHint')}>
+            <span className="hidden sm:inline">{t('steps.buildNow')}</span>
             <Play size={14} className="fill-white" />
           </button>
         </div>
@@ -237,43 +307,60 @@ function Workspace() {
 
       <div className="relative flex min-h-0 flex-1">
         {/* sidebar */}
-        <nav className="hidden w-16 shrink-0 flex-col gap-1 border-r border-line bg-card/40 p-2 md:flex xl:w-52">
-          {NAV.map((n) => (
+        <nav className="hidden w-16 shrink-0 flex-col gap-1 border-r border-line bg-card/40 p-2 md:flex xl:w-56" aria-label={t('editor.navLabel')}>
+          {NAV.map(navButton)}
+          <div className="mt-2 border-t border-line pt-2">
             <button
-              key={n.id}
-              onClick={() => nav(n.id, n.node)}
-              title={t(n.label)}
-              className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition ${
-                activeNav === n.id ? 'bg-accent/10 text-white shadow-glow-sm' : 'text-muted hover:bg-white/5 hover:text-white'
-              }`}
+              onClick={() => setAdvancedNav((v) => !v)}
+              aria-expanded={advancedNav}
+              title={t('common.advancedHint')}
+              className="flex min-h-[40px] w-full items-center gap-3 rounded-xl px-3 py-2 text-[13px] text-muted hover:text-white"
             >
-              <n.icon size={18} className={activeNav === n.id ? 'text-accent-light' : ''} />
-              <span className="hidden xl:inline">{t(n.label)}</span>
+              <ChevronDown size={16} className={`shrink-0 transition ${advancedNav ? 'rotate-180' : ''}`} />
+              <span className="hidden xl:inline">{t('common.advanced')}</span>
             </button>
-          ))}
+            {advancedNav && NAV_ADVANCED.map(navButton)}
+          </div>
         </nav>
 
-        {/* canvas */}
-        <div className="min-w-0 flex-1">
-          <Canvas />
+        {/* steps + canvas */}
+        <div className="flex min-w-0 flex-1 flex-col">
+          <NextSteps />
+          <div className="min-h-0 flex-1">
+            <Canvas />
+          </div>
         </div>
 
         {/* properties */}
         {Panel && selected && PanelIcon && (
-          <aside className="absolute inset-x-0 bottom-0 z-20 flex max-h-[72dvh] flex-col rounded-t-[20px] border-t border-line bg-card shadow-2xl lg:static lg:max-h-none lg:w-[380px] lg:shrink-0 lg:rounded-none lg:border-l lg:border-t-0 lg:shadow-none">
-            <div className="flex items-center gap-3 border-b border-line p-4">
-              <span className="icon-tile h-9 w-9">
-                <PanelIcon size={16} />
+          <aside
+            style={{ '--panel-w': `${panelWidth}px` } as CSSProperties}
+            className="panel absolute inset-x-0 bottom-0 z-20 flex h-[85dvh] flex-col rounded-t-[20px] border-t border-line bg-card shadow-2xl lg:relative lg:h-auto lg:w-[var(--panel-w)] lg:shrink-0 lg:rounded-none lg:border-l lg:border-t-0 lg:shadow-none"
+          >
+            <div
+              role="separator"
+              aria-orientation="vertical"
+              aria-label={t('editor.resize')}
+              title={t('editor.resize')}
+              onPointerDown={startResize}
+              className="absolute -left-1.5 top-0 z-10 hidden h-full w-3 cursor-col-resize lg:block"
+            >
+              <span className="mx-auto block h-full w-px bg-line transition hover:bg-accent" />
+            </div>
+            <div className="mx-auto mt-2 h-1.5 w-12 rounded-full bg-line lg:hidden" />
+            <div className="flex items-center gap-3 border-b border-line px-5 py-4">
+              <span className="icon-tile h-11 w-11">
+                <PanelIcon size={20} />
               </span>
-              <div className="flex-1">
-                <div className="label-caps">{t('editor.properties')}</div>
-                <div className="font-display font-bold">{t(nodeKey[selected])}</div>
+              <div className="min-w-0 flex-1">
+                <div className="font-display text-lg font-bold">{t(nodeKey[selected])}</div>
+                <div className="truncate text-[13px] text-muted">{t(`nodes.desc.${selected}`)}</div>
               </div>
-              <button className="btn-ghost p-2" onClick={() => select(null)} aria-label={t('common.close')}>
-                <X size={18} />
+              <button className="btn-ghost min-h-[44px] min-w-[44px] p-2" onClick={() => select(null)} aria-label={t('common.close')} title={t('common.close')}>
+                <X size={20} />
               </button>
             </div>
-            <div className="scrollbar-thin flex-1 overflow-y-auto p-4 pb-8">
+            <div className="scrollbar-thin flex-1 overflow-y-auto px-5 py-5 pb-10">
               <Panel />
             </div>
           </aside>
@@ -283,18 +370,21 @@ function Workspace() {
       </div>
 
       {/* mobile nav */}
-      <nav className="grid shrink-0 grid-cols-6 border-t border-line bg-card pb-[env(safe-area-inset-bottom)] md:hidden">
+      <nav className="grid shrink-0 grid-cols-5 border-t border-line bg-card pb-[env(safe-area-inset-bottom)] md:hidden">
         {NAV.map((n) => (
           <button
             key={n.id}
             onClick={() => nav(n.id, n.node)}
-            className={`flex flex-col items-center gap-1 py-2 text-[10px] ${activeNav === n.id ? 'text-accent-light' : 'text-muted'}`}
+            title={t(n.hint)}
+            className={`flex min-h-[52px] flex-col items-center justify-center gap-1 py-2 text-[11px] ${activeNav === n.id ? 'text-accent-light' : 'text-muted'}`}
           >
-            <n.icon size={18} />
+            <n.icon size={19} />
             <span className="max-w-full truncate px-0.5">{t(n.label)}</span>
           </button>
         ))}
       </nav>
+
+      <PlayerModal />
     </div>
   );
 }

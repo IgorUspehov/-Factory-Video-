@@ -5,7 +5,7 @@ import { useEditor } from '../EditorContext';
 import { useI18n } from '../../i18n';
 import { nodeIcon } from '../nodeMeta';
 import { nodeKey, statusKey, textModeKey, transitionKey } from '../../lib/labels';
-import { formatClock, projectDuration } from '../../lib/project';
+import { effectiveTimeline, formatClock, projectDuration } from '../../lib/project';
 import { renderCost } from '../../config/pricing';
 import { Waveform } from '../../components/Waveform';
 import type { NodeKind } from '../../types';
@@ -13,7 +13,7 @@ import type { NodeKind } from '../../types';
 function Summary({ kind }: { kind: NodeKind }) {
   const { project, startRender, renderStarting } = useEditor();
   const { t } = useI18n();
-  const empty = (text: string) => <p className="text-xs text-muted">{text}</p>;
+  const empty = (text: string) => <p className="text-[13px] text-muted">{text}</p>;
 
   switch (kind) {
     case 'audio': {
@@ -22,11 +22,11 @@ function Summary({ kind }: { kind: NodeKind }) {
       if (a.source === 'none') return empty(t('audio.noneActive'));
       return (
         <div>
-          <div className="truncate text-xs font-medium">{a.name}</div>
+          <div className="truncate text-[13px] font-medium">{a.name}</div>
           <div className="mt-2 rounded-lg bg-bg p-1.5">
             <Waveform peaks={a.peaks} beats={a.beats} duration={a.duration} height={28} compact />
           </div>
-          <div className="mt-1.5 flex justify-between text-[10px] text-muted">
+          <div className="mt-1.5 flex justify-between text-[12px] text-muted">
             <span>{a.bpm ? `${a.bpm} BPM` : ''}</span>
             <span>{formatClock(a.duration)}</span>
           </div>
@@ -44,22 +44,22 @@ function Summary({ kind }: { kind: NodeKind }) {
               </div>
             ))}
           </div>
-          <div className="mt-1.5 text-[10px] text-muted">{t('nodes.items', { n: project.media.length })}</div>
+          <div className="mt-1.5 text-[12px] text-muted">{t('nodes.items', { n: project.media.length })}</div>
         </div>
       );
     case 'text':
       return (
         <div>
-          <div className="label-caps mb-1.5 text-[9px] text-accent-light">{t(textModeKey[project.textMode])}</div>
+          <div className="label-caps mb-1.5 text-[11px] text-accent-light">{t(textModeKey[project.textMode])}</div>
           {project.lyrics.length === 0
             ? empty(t('nodes.textEmpty'))
             : project.lyrics.slice(0, 2).map((l) => (
-                <div key={l.id} className="truncate text-xs">
+                <div key={l.id} className="truncate text-[13px]">
                   <span className="mr-1.5 tabular-nums text-muted">{l.start.toFixed(1)}s</span>
                   {l.text}
                 </div>
               ))}
-          {project.lyrics.length > 2 && <div className="mt-1 text-[10px] text-muted">+{project.lyrics.length - 2}</div>}
+          {project.lyrics.length > 2 && <div className="mt-1 text-[12px] text-muted">+{project.lyrics.length - 2}</div>}
         </div>
       );
     case 'style': {
@@ -72,22 +72,23 @@ function Summary({ kind }: { kind: NodeKind }) {
           <span className="ml-1 truncate text-xs" style={{ fontFamily: s.font }}>
             {s.font}
           </span>
-          <span className="ml-auto text-[10px] text-muted">{t(transitionKey[s.transition])}</span>
+          <span className="ml-auto text-[12px] text-muted">{t(transitionKey[s.transition])}</span>
         </div>
       );
     }
     case 'montage': {
-      const total = projectDuration(project);
+      const plan = effectiveTimeline(project);
+      const total = plan.total;
       if (project.timeline.length === 0) return empty(t('nodes.montageEmpty'));
       return (
         <div>
-          <div className="flex h-5 gap-0.5 overflow-hidden rounded-md">
-            {project.timeline.map((c, i) => (
-              <span key={c.id} className={i % 2 ? 'bg-accent/60' : 'bg-accent'} style={{ flexGrow: c.duration }} />
+          <div className="flex h-6 gap-px overflow-hidden rounded-md">
+            {plan.clips.map((c, i) => (
+              <span key={i} className={i % 2 ? 'bg-accent/60' : 'bg-accent'} style={{ flexGrow: c.duration }} />
             ))}
           </div>
-          <div className="mt-1.5 flex justify-between text-[10px] text-muted">
-            <span>{t('nodes.clips', { n: project.timeline.length })}</span>
+          <div className="mt-1.5 flex justify-between text-[12px] text-muted">
+            <span>{t('nodes.clips', { n: plan.clips.length })}</span>
             <span>{formatClock(total)}</span>
           </div>
         </div>
@@ -98,8 +99,10 @@ function Summary({ kind }: { kind: NodeKind }) {
       const cost = renderCost(projectDuration(project) || 15);
       return (
         <div>
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-muted">{project.format}</span>
+          <div className="flex items-center justify-between text-[13px]">
+            <span className="text-muted">
+              {project.format} · {formatClock(projectDuration(project))}
+            </span>
             <span className="inline-flex items-center gap-1 font-semibold">
               <Zap size={12} className="fill-accent text-accent" />
               {cost}
@@ -110,7 +113,7 @@ function Summary({ kind }: { kind: NodeKind }) {
               <div className="h-1.5 overflow-hidden rounded-full bg-bg">
                 <div className="glow-line h-full transition-all" style={{ width: `${r.status === 'done' ? 100 : r.progress}%` }} />
               </div>
-              <div className="mt-1 text-[10px] text-muted">
+              <div className="mt-1 text-[12px] text-muted">
                 {t(statusKey[r.status])}
                 {r.status === 'rendering' ? ` · ${r.progress}%` : ''}
               </div>
@@ -124,7 +127,7 @@ function Summary({ kind }: { kind: NodeKind }) {
               void startRender();
             }}
           >
-            <Play size={12} className="fill-white" /> {t('render.start')}
+            <Play size={12} className="fill-white" /> {t('steps.buildNow')}
           </button>
         </div>
       );
@@ -141,16 +144,20 @@ function BlockNodeImpl({ type }: NodeProps) {
   const isOutput = kind === 'output';
   return (
     <div
-      className={`w-[232px] rounded-[18px] border bg-card p-3.5 transition ${
+      title={t(`nodes.desc.${kind}`)}
+      className={`w-[280px] cursor-pointer rounded-[18px] border bg-card p-4 transition ${
         active ? 'border-accent shadow-glow' : isOutput ? 'border-accent/50 shadow-glow-sm' : 'border-line hover:border-accent/50'
       }`}
     >
       {kind !== 'audio' && <Handle type="target" position={Position.Left} />}
-      <div className="mb-3 flex items-center gap-2.5">
-        <span className="icon-tile h-8 w-8 rounded-lg">
-          <Icon size={15} />
+      <div className="mb-3 flex items-start gap-3">
+        <span className="icon-tile h-10 w-10 rounded-xl">
+          <Icon size={18} />
         </span>
-        <span className="font-display text-[11px] font-extrabold uppercase tracking-[0.18em]">{t(nodeKey[kind])}</span>
+        <span className="min-w-0">
+          <span className="block font-display text-[14px] font-extrabold uppercase tracking-[0.12em]">{t(nodeKey[kind])}</span>
+          <span className="block text-[13px] leading-snug text-muted">{t(`nodes.desc.${kind}`)}</span>
+        </span>
       </div>
       <Summary kind={kind} />
       {!isOutput && <Handle type="source" position={Position.Right} />}

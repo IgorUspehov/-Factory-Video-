@@ -13,6 +13,7 @@ import type {
   TimelineClip,
   Project,
 } from '../types';
+import { defaultLengthMode, plannedDuration } from '../../server/src/shared/timeline.js';
 
 export const uid = (prefix = 'id') => `${prefix}_${Math.random().toString(36).slice(2, 9)}${Date.now().toString(36).slice(-3)}`;
 
@@ -43,7 +44,8 @@ export const MOOD_STYLES: Record<Mood, StyleSettings> = {
 export const GOAL_TEXT_MODE: Record<Goal, TextMode> = { clip: 'lyrics', promo: 'slogan', reels: 'titles' };
 
 export function defaultGraph(): { nodes: FlowNodeData[]; edges: FlowEdgeData[] } {
-  const nodes = NODE_ORDER.map((type, i) => ({ id: type, type, position: { x: i * 300, y: i % 2 === 0 ? 0 : 60 } }));
+  // 3 × 2 grid: fits a typical canvas at a readable zoom
+  const nodes = NODE_ORDER.map((type, i) => ({ id: type, type, position: { x: (i % 3) * 340, y: Math.floor(i / 3) * 300 } }));
   const edges = NODE_ORDER.slice(1).map((type, i) => ({ id: `e-${NODE_ORDER[i]}-${type}`, source: NODE_ORDER[i], target: type }));
   return { nodes, edges };
 }
@@ -70,6 +72,7 @@ export function createDraft({ title, goal, format, mood, starterLines }: DraftOp
     format,
     mood,
     textMode: GOAL_TEXT_MODE[goal],
+    lengthMode: defaultLengthMode(goal),
     nodes,
     edges,
     audio: null,
@@ -92,12 +95,12 @@ export function syncTimeline(media: MediaItem[], timeline: TimelineClip[]): Time
   return [...kept, ...added];
 }
 
-export function projectDuration(p: Pick<Project, 'timeline' | 'audio'>): number {
-  const sum = p.timeline.reduce((s, c) => s + c.duration, 0);
-  if (sum > 0) return Math.round(sum * 10) / 10;
-  if (p.audio && p.audio.source !== 'none') return Math.min(p.audio.duration, 30);
-  return 0;
+/** Rendered (and billed) length in seconds — identical to the backend (server/src/shared/timeline.js). */
+export function projectDuration(p: Project): number {
+  return plannedDuration(p);
 }
+
+export { effectiveTimeline, lengthModeOf, trackDuration, MAX_VIDEO_SECONDS, LENGTH_PRESETS } from '../../server/src/shared/timeline.js';
 
 /** Snaps clip durations to whole beat intervals (at least one beat). */
 export function snapToBeats(timeline: TimelineClip[], bpm: number): TimelineClip[] {
@@ -137,7 +140,7 @@ export function autoLayout(nodes: FlowNodeData[], edges: FlowEdgeData[], maxCols
   const rows = new Map<number, number>();
   const perLayer = new Map<number, number>();
   for (const n of nodes) perLayer.set(depth.get(n.id) ?? 0, (perLayer.get(depth.get(n.id) ?? 0) ?? 0) + 1);
-  const bandHeight = Math.max(1, ...perLayer.values()) * 220 + 60;
+  const bandHeight = Math.max(1, ...perLayer.values()) * 250 + 60;
   const ordered = [...nodes].sort((a, b) => NODE_ORDER.indexOf(a.type) - NODE_ORDER.indexOf(b.type));
   const placed = new Map<string, { x: number; y: number }>();
   for (const n of ordered) {
@@ -146,7 +149,7 @@ export function autoLayout(nodes: FlowNodeData[], edges: FlowEdgeData[], maxCols
     rows.set(layer, row + 1);
     const col = Number.isFinite(maxCols) ? layer % maxCols : layer;
     const band = Number.isFinite(maxCols) ? Math.floor(layer / maxCols) : 0;
-    placed.set(n.id, { x: col * 300, y: band * bandHeight + row * 220 });
+    placed.set(n.id, { x: col * 340, y: band * bandHeight + row * 250 });
   }
   return nodes.map((n) => ({ ...n, position: placed.get(n.id) ?? n.position }));
 }

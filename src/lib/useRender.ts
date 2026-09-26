@@ -4,10 +4,12 @@ import { useAuth } from './auth';
 import { projectDuration } from './project';
 import type { Format, Project, RenderState } from '../types';
 
+export type RenderError = 'credits' | 'too_long' | 'generic';
+
 /** Starts render jobs and polls their status until they finish. */
 export function useRender(project: Project | null, onChange: (render: RenderState) => void) {
   const { refresh } = useAuth();
-  const [error, setError] = useState<'credits' | 'generic' | null>(null);
+  const [error, setError] = useState<RenderError | null>(null);
   const [starting, setStarting] = useState(false);
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
@@ -57,7 +59,9 @@ export function useRender(project: Project | null, onChange: (render: RenderStat
         void refresh();
         return true;
       } catch (err) {
-        setError(err instanceof ApiError && err.status === 402 ? 'credits' : 'generic');
+        setError(
+          err instanceof ApiError && err.status === 402 ? 'credits' : err instanceof ApiError && err.message === 'too_long' ? 'too_long' : 'generic',
+        );
         return false;
       } finally {
         setStarting(false);

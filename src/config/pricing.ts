@@ -9,10 +9,8 @@ export const pricing = {
   credits: { packPrice: 9, packCredits: 50 },
 } as const;
 
-/** Estimated render cost in credits: 1 credit per started 30 seconds of video. */
-export function renderCost(durationSec: number): number {
-  return Math.max(1, Math.ceil(durationSec / 30));
-}
+/** Render cost in credits — same function the backend bills with. */
+export { renderCost } from '../../server/src/shared/timeline.js';
 
 export function formatPrice(value: number, locale: string): string {
   return new Intl.NumberFormat(locale, { style: 'currency', currency: pricing.currency, maximumFractionDigits: 0 }).format(value);

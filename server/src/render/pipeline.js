@@ -3,39 +3,14 @@ import path from 'node:path';
 import { config } from '../config.js';
 import { FFMPEG, run } from '../media.js';
 import { buildAss } from './ass.js';
+import { effectiveTimeline } from '../shared/timeline.js';
 
 export const FPS = 30;
 export const DIMENSIONS = { '9:16': [720, 1280], '16:9': [1280, 720], '1:1': [720, 720] };
 const XFADE = { fade: 'fade', zoom: 'zoomin', slide: 'slideleft' };
 const X264 = ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '21', '-pix_fmt', 'yuv420p', '-threads', '2'];
 
-/** Same rule as the frontend: timeline sum, otherwise the audio (max 30 s). */
-export function plannedDuration(project) {
-  const sum = (project.timeline ?? []).reduce((s, c) => s + (Number(c.duration) || 0), 0);
-  if (sum > 0) return Math.round(sum * 10) / 10;
-  if (project.audio && project.audio.source !== 'none') return Math.min(Number(project.audio.duration) || 0, 30);
-  return 0;
-}
-
-/** Moves every cut to the nearest beat, keeping each clip at least 0.5 s long. */
-export function snapToBeats(durations, beats) {
-  if (!beats?.length || durations.length < 2) return durations;
-  const out = [];
-  let prev = 0;
-  let planned = 0;
-  durations.forEach((d, i) => {
-    planned += d;
-    if (i === durations.length - 1) {
-      out.push(Math.max(0.5, planned - prev));
-      return;
-    }
-    const candidates = beats.filter((b) => b >= prev + 0.5);
-    const cut = candidates.length ? candidates.reduce((best, b) => (Math.abs(b - planned) < Math.abs(best - planned) ? b : best)) : planned;
-    out.push(Math.round((cut - prev) * 1000) / 1000);
-    prev = cut;
-  });
-  return out;
-}
+export { plannedDuration } from '../shared/timeline.js';
 
 /** Runs ffmpeg with -progress and reports 0..1 of `seconds` of output. */
 function ffmpeg(args, seconds, onProgress, timeoutMs) {
@@ -85,18 +60,18 @@ export async function renderProject({ project, format, watermark, workDir, resol
   await mkdir(workDir, { recursive: true });
   const style = project.style ?? {};
   const mediaById = new Map((project.media ?? []).map((m) => [m.id, m]));
-  const timeline = (project.timeline ?? []).filter((c) => mediaById.has(c.mediaId) && Number(c.duration) > 0);
   const audio = project.audio && project.audio.source !== 'none' && project.audio.url ? project.audio : null;
-
-  let durations = timeline.map((c) => Number(c.duration));
-  if (style.beatSync && audio?.beats?.length) durations = snapToBeats(durations, audio.beats);
+  // length mode, repetition over the track and beat snapping: same code as the frontend preview
+  const plan = effectiveTimeline(project);
+  const timeline = plan.clips;
+  const durations = timeline.map((c) => c.duration);
 
   // frame-exact layout from cumulative times
   const starts = [0];
   for (const d of durations) starts.push(starts.at(-1) + d);
   const startFrames = starts.map((s) => Math.round(s * FPS));
   const clipFrames = durations.map((_, i) => startFrames[i + 1] - startFrames[i]);
-  const totalFrames = timeline.length ? startFrames.at(-1) : Math.round(plannedDuration(project) * FPS);
+  const totalFrames = timeline.length ? startFrames.at(-1) : Math.round(plan.total * FPS);
   const total = totalFrames / FPS;
   if (!(totalFrames > 0)) throw new Error('empty_project');
 

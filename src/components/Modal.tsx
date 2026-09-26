@@ -2,7 +2,21 @@ import { useEffect, type ReactNode } from 'react';
 import { X } from 'lucide-react';
 import { useI18n } from '../i18n';
 
-export function Modal({ open, onClose, title, children }: { open: boolean; onClose: () => void; title: string; children: ReactNode }) {
+const WIDTH = { md: 'max-w-md', lg: 'max-w-3xl', xl: 'max-w-5xl' };
+
+export function Modal({
+  open,
+  onClose,
+  title,
+  children,
+  size = 'md',
+}: {
+  open: boolean;
+  onClose: () => void;
+  title: string;
+  children: ReactNode;
+  size?: keyof typeof WIDTH;
+}) {
   const { t } = useI18n();
   useEffect(() => {
     if (!open) return;
@@ -17,7 +31,7 @@ export function Modal({ open, onClose, title, children }: { open: boolean; onClo
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="card max-h-[90dvh] w-full max-w-md overflow-y-auto rounded-b-none p-6 sm:rounded-[18px]"
+        className={`card max-h-[92dvh] w-full ${WIDTH[size]} overflow-y-auto rounded-b-none p-5 sm:rounded-[18px] sm:p-6`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-4 flex items-start justify-between gap-4">

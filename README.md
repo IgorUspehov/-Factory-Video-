@@ -2,7 +2,7 @@
 
 **DE** · [EN](#english) · [RU](#русский)
 
-Stand der Dokumentation / Documentation as of / Документация актуальна на: **2026-09-26**, Version 0.2.0.
+Stand der Dokumentation / Documentation as of / Документация актуальна на: **2026-09-27**, Version 0.3.0.
 
 ---
 
@@ -17,7 +17,7 @@ Das Repository enthält das **Frontend** (Wurzelverzeichnis) und seit 0.2.0 das 
 
 - Repository: https://github.com/IgorUspehov/-Factory-Video- (Branch `main`)
 - Frontend in Produktion: https://factory-video.onrender.com
-- Backend in Produktion: noch nicht angelegt (siehe „Deployment“).
+- Backend in Produktion: https://factory-video-api.onrender.com (laut Eigentümer angelegt; `/api/health` antwortet mit 200).
 
 ### Voraussetzungen
 
@@ -103,7 +103,7 @@ server/
 | `POST /api/upload/media` | JPG/PNG/WEBP, MP4/MOV/WEBM/M4V, ≤ 200 MB, Prüfung mit ffprobe |
 | `POST /api/audio/analyze` | `{ duration, bpm, beats[], peaks[] }` für eigenen Upload oder Bibliothekstrack; Ergebnis gecacht |
 | `GET /api/library/audio?mood=&niche=` | statische Trackliste |
-| `GET /api/library/media?mood=&niche=&kind=` | Pexels (Fotos + Videos) oder statische Liste; Header `X-Library-Source` |
+| `GET /api/library/media?q=&kind=&orientation=&page=&lang=&mood=&niche=` | Pexels-Suche (Fotos + Videos, mit `credit` = Urheber) oder statische Liste; eine Seite pro Aufruf, leere Liste = keine weiteren Seiten; Header `X-Library-Source` |
 | `POST /api/render` | `{ jobId, cost }`; Kosten nach `renderCost`; 402 `insufficient_credits`; 400 `empty_project` / `too_long` (> 300 s) |
 | `GET /api/render/:jobId` | `{ status, progress, url, expiresAt, watermark }` |
 | `GET /api/render/:jobId/link` | neue signierte Link-Gültigkeit von 7 Tagen |
@@ -128,6 +128,21 @@ Fehlerformat: `{ error: <code>, message }` — der Frontend-Client liest `error`
 **Speicherschicht** (`server/src/storage`): Schnittstelle `put(key, srcPath)`, `localPath(key)`, `remove(key)`, `publicUrl(key)`, `signedUrl(key, expiresAt)`, `verify(key, exp, sig)`. Aktuell `local.js` (DATA_DIR/files); für Etappe 3 wird ein R2-Treiber mit gleicher Schnittstelle in `storage/index.js` eingesetzt.
 
 **Remote-Dateien**: Der Server lädt Bibliotheks- und Pexels-Dateien nur von einer Positivliste von Hosts (Unsplash, Pexels, SoundHelix, test-videos.co.uk, MDN, samplelib) und cacht sie in DATA_DIR/cache.
+
+### Editor-Oberfläche (seit 0.3.0)
+
+- Leiste **„Was als Nächstes?“** über der Leinwand: ① Musik hinzufügen → ② Fotos oder Videos hinzufügen → ③ Video erstellen, mit Häkchen; der aktuelle Schritt ist hervorgehoben, ein Klick öffnet den passenden Block. Sind 1 und 2 erledigt, erscheint die große Schaltfläche „Video erstellen“; während des Renderns zeigt die Leiste den Fortschritt groß an, danach „Video ansehen“.
+- Blöcke größer (Titel 14 px, Beschreibung 13 px) mit einer Zeile in einfacher Sprache unter dem Titel; Standardanordnung 3 × 2, „Anordnen“ ordnet in 3 Spalten (unter 768 px: 2).
+- Alle Schaltflächen mit Beschriftung und Tooltip (`title`), schwierige Optionen mit grauer Erklärung darunter. Optionale Einstellungen liegen im Bereich **„Erweitert“**: Stil komplett (bis auf „Schnitt im Takt“), Feineinstellung des Schnitts; „Marke“ in der Seitenleiste unter „Erweitert“.
+- Eigenschaften-Panel: Standardbreite 33 % des Fensters (min. 380 px, max. 60 %), am linken Rand per Maus verstellbar, Breite in `localStorage` (`fv_panel_width`); Grundschrift 15 px, Schaltflächen ≥ 44 px. Mobil: Bottom-Sheet mit 85 % Höhe.
+- Nach dem Rendern öffnet sich der Player automatisch als großes Fenster (MP4 herunterladen, Link kopieren, Export-Seite, Schließen) — nur für Renders, die in dieser Sitzung gestartet wurden.
+- Medienbibliothek (Picker im Visual-Block und Seite `/library`): Suchfeld, Filter Fotos/Videos, Ausrichtung passend zum Projektformat (9:16 → Hochformat), Nachladen beim Scrollen, Stimmung/Nische als schnelle Vorschläge, Urheber (Pexels) klein auf der Vorschau, Leiste der ausgewählten Elemente.
+
+**Videolänge** (`lengthMode` im Projekt, Logik in `server/src/shared/timeline.js`, von Frontend und Backend gemeinsam genutzt):
+- `track` — so lang wie der Track (Standard für „Musikvideo“); `15` / `30` / `60` — feste Länge; `timeline` — Summe der Schnitt-Längen (Standard für Promo und Reels).
+- Bei `track` und festen Längen werden die Clips gleichmäßig über die Länge verteilt; die Bilddauer entspricht ungefähr dem Durchschnitt der Schnitt-Längen, zu wenige Clips wiederholen sich der Reihe nach; bei „Schnitt im Takt“ sitzen die Schnitte auf dem nächsten Beat.
+- Über 300 s: Hinweis im Editor mit „Auf 5:00 kürzen“ (`lengthMode = 300`); das Backend antwortet sonst mit 400 `too_long`.
+- Kosten = `renderCost(plannedDuration(project))` — dieselbe Funktion im Frontend (Anzeige) und im Backend (Abrechnung).
 
 ### Umgebungsvariablen (Backend, `server/.env.example`)
 
@@ -154,7 +169,8 @@ cd server
 npm install
 cp .env.example .env             # Werte anpassen
 npm start                        # http://localhost:8080
-npm run smoke                    # End-to-End-Test mit eigenem Server und temporärem DATA_DIR
+npm run smoke                    # End-to-End-Test mit eigenem Server, temporärem DATA_DIR und Pexels-Attrappe
+node scripts/fake-pexels.mjs     # Pexels-Attrappe auf :18999 (PEXELS_API_BASE=http://127.0.0.1:18999)
 
 # Frontend gegen lokales Backend
 VITE_API_URL=http://localhost:8080 npm run dev
@@ -163,12 +179,13 @@ VITE_API_URL=http://localhost:8080 npm run dev
 ### Deployment
 
 - **Frontend**: Render Static Site, Projekt „My project“, https://factory-video.onrender.com; Build `npm ci && npm run build`, Publish `./dist`, Rewrite `/*` → `/index.html`, Autodeploy bei Push auf `main`.
-- **Backend**: zweiter Dienst `factory-video-api` in `render.yaml` (Typ web, Runtime node, rootDir `server`, Build `npm ci`, Start `npm start`, Health-Check `/api/health`; ENV: `JWT_SECRET` generiert, `PEXELS_API_KEY` und `PUBLIC_URL` manuell, `FRONTEND_ORIGIN=https://factory-video.onrender.com`, `DATA_DIR=./data`). Stand 2026-09-26: Dienst noch nicht angelegt.
+- **Backend**: zweiter Dienst `factory-video-api` in `render.yaml` (Typ web, Runtime node, rootDir `server`, Build `npm ci`, Start `npm start`, Health-Check `/api/health`; ENV: `JWT_SECRET` generiert, `PEXELS_API_KEY` und `PUBLIC_URL` manuell, `FRONTEND_ORIGIN=https://factory-video.onrender.com`, `DATA_DIR=./data`). Der Dienst läuft unter https://factory-video-api.onrender.com; ob dort `PEXELS_API_KEY` gesetzt ist: **UNKNOWN**.
 - Danach im Static Site `VITE_API_URL` auf die URL des API-Dienstes setzen und neu deployen; sonst läuft das Frontend weiter auf Mocks.
 - Instanztyp / Plan des API-Dienstes: **UNKNOWN**.
 
 ### Aktueller Stand
 
+- 0.3.0 (2026-09-27): Editor-Überarbeitung nach dem ersten Test des Eigentümers in Produktion. Lokal geprüft: `npx tsc --noEmit`, `npm run build`; `npm run smoke` (99/99); Headless Chrome gegen lokales Backend mit Pexels-Attrappe (`server/scripts/fake-pexels.mjs`): 21/21 — u. a. Musikvideo mit 1:50-Track → MP4 110,03 s = Track, 3 gezielt gewählte Fotos landen genau so im Projekt (auch wenn eine ältere, langsamere Suche danach antwortet), Suche „singer stage“ liefert Ergebnisse, Nachladen beim Scrollen, Player öffnet sich nach dem Rendern selbst, Panel 475 px (33 % von 1440) und verstellbar, mobil Bottom-Sheet 85 %, keine JS-Fehler. Screenshots: `docs/screenshots/0.3.0/` (Bibliothek dort mit der Pexels-Attrappe, daher „Fixture Photographer“). Gegen die echte Pexels-API nicht geprüft (kein Schlüssel verfügbar): **UNKNOWN**.
 - Etappe 0 ✔, Etappe 1 ✔, Etappe 2 (Backend-MVP) ✔ lokal; noch nicht auf Render deployt.
 - Geprüft (lokal, 2026-09-26):
   - `npx tsc --noEmit` und `npm run build` (Frontend) ohne Fehler.
@@ -201,11 +218,20 @@ Renderzeiten und Speicher auf Render: **UNKNOWN** (abhängig vom Instanztyp).
 - Links auf Renders: HMAC-signiert, 7 Tage; Uploads: unsignierte, nicht erratbare UUID-Pfade.
 - Frontend: Aus Mock- und Echtbetrieb resultierende Anpassungen siehe CHANGELOG 0.2.0.
 
+- Längen- und Kostenlogik einmal in `server/src/shared/timeline.js` (JS + `.d.ts`); das Frontend importiert sie direkt (`src/lib/project.ts`, `src/config/pricing.ts`), damit Anzeige und Abrechnung nie auseinanderlaufen.
+- Pexels-Suche: der eingegebene Text wird unverändert gesendet, mit `locale` = Oberflächensprache (`de-DE` / `en-US` / `ru-RU`). Die Pexels-API unterstützt laut Dokumentation mehrsprachige Suche über `locale`; ein eigenes Wörterbuch würde nur häufige Wörter abdecken und Phrasen verfälschen. Schnelle Vorschläge (Stimmung/Nische) senden feste englische Begriffe mit `en-US`.
+- Ausrichtung der Bibliothek folgt dem Projektformat (9:16 → `portrait`, 16:9 → `landscape`, 1:1 → `square`), abschaltbar.
+- Vor jedem Render wird das Projekt gespeichert (ausstehende Änderungen und laufende Speicherung abgewartet), weil das Backend den gespeicherten Stand rendert.
+- Ursache des Fehlers „es werden andere Fotos hinzugefügt“ siehe CHANGELOG 0.3.0.
+
 ### Einschränkungen
 
 - **DATA_DIR geht bei jedem Redeploy auf Render verloren** (kein persistenter Datenträger). Bis Etappe 3 (R2) akzeptiert: Nutzer, Projekte, Uploads und Renders verschwinden dann; ausgegebene JWT werden ungültig, falls `JWT_SECRET` neu generiert wird.
 - Nur eine Serverinstanz möglich (JSON-Dateien + Warteschlange im Prozess).
-- Das Frontend bietet 12 Schriften an, der Render kennt 4 (Inter, Montserrat, Bebas Neue, Playfair Display); alle anderen werden im Video als Inter gerendert. Bebas Neue hat keine kyrillischen Glyphen → kyrillische Zeilen in Inter.
+- Das Frontend bietet 12 Schriften an, der Render kennt 4 (Inter, Montserrat, Bebas Neue, Playfair Display); alle anderen werden im Video als Inter gerendert — im Stil-Panel mit „*“ markiert. Bebas Neue hat keine kyrillischen Glyphen → kyrillische Zeilen in Inter.
+- Qualität der mehrsprachigen Pexels-Suche (DE/RU) mit echtem Schlüssel: **UNKNOWN**. Ohne Schlüssel durchsucht die Suche nur Titel, Stimmung und Nische der statischen Liste.
+- Panel-Breite verstellbar nur ab 1024 px Fensterbreite; der Player öffnet sich automatisch nur für Renders aus der aktuellen Sitzung.
+- Bestehende Projekte behalten ihre Blockpositionen; die neue 3 × 2-Anordnung gibt es über „Anordnen“.
 - Beat-Erkennung: langsame Tracks können als doppeltes Tempo erkannt werden (synthetischer 75-BPM-Track → 150 BPM). Das tatsächliche Tempo der SoundHelix-Bibliothekstracks ist **UNKNOWN**; gemessen: 132–148 BPM.
 - Die Werte `bpm` und `duration` in der Bibliotheksliste (`src/lib/libraryData.ts`, `server/src/libraryData.js`) sind Platzhalter aus Etappe 1 und weichen teils von den Dateien ab (z. B. Track 1: 124 vs. gemessen 135 BPM; Track 6: 307 s vs. 279,6 s). `/api/audio/analyze` liefert die gemessenen Werte.
 - Text wird auf Render nur mit den mitgelieferten Schriften über fontconfig/libass gerendert; ob fontconfig auf Render ohne Systemschriften sauber läuft: **UNKNOWN** (lokal geprüft).
@@ -218,7 +244,7 @@ Renderzeiten und Speicher auf Render: **UNKNOWN** (abhängig vom Instanztyp).
 
 ### Nächste Schritte
 
-1. Dienst `factory-video-api` auf Render anlegen, `PUBLIC_URL` und optional `PEXELS_API_KEY` setzen, danach `VITE_API_URL` im Static Site setzen und neu deployen; Render-Zeiten und Speicher dort messen.
+1. Auf Render: prüfen, ob `PEXELS_API_KEY` gesetzt ist, und die Pexels-Suche (DE/RU) mit echtem Schlüssel testen; Render-Zeiten und Speicher dort messen.
 2. Etappe 3: Videos und Uploads in Cloudflare R2 (R2-Treiber für `server/src/storage`), Links, Verlauf; Datenbank statt JSON-Dateien (Wahl **UNKNOWN**).
 3. Etappe 4: Polar (Credits/Abo, Webhooks), Checkout und Portal statt 501.
 4. Etappe 5: Integration mit Website-SDK (webstudio-sdk-muenchen.com) über API.
@@ -239,7 +265,7 @@ The repository contains the **frontend** (root) and, since 0.2.0, the **backend*
 
 - Repository: https://github.com/IgorUspehov/-Factory-Video- (branch `main`)
 - Frontend in production: https://factory-video.onrender.com
-- Backend in production: not created yet (see "Deployment").
+- Backend in production: https://factory-video-api.onrender.com (created by the owner; `/api/health` returns 200).
 
 ### Requirements
 
@@ -325,7 +351,7 @@ server/
 | `POST /api/upload/media` | JPG/PNG/WEBP, MP4/MOV/WEBM/M4V, ≤ 200 MB, checked with ffprobe |
 | `POST /api/audio/analyze` | `{ duration, bpm, beats[], peaks[] }` for an own upload or a library track; result cached |
 | `GET /api/library/audio?mood=&niche=` | static track list |
-| `GET /api/library/media?mood=&niche=&kind=` | Pexels (photos + videos) or static list; header `X-Library-Source` |
+| `GET /api/library/media?q=&kind=&orientation=&page=&lang=&mood=&niche=` | Pexels search (photos + videos, with `credit` = author) or static list; one page per call, empty list = no more pages; header `X-Library-Source` |
 | `POST /api/render` | `{ jobId, cost }`; cost by `renderCost`; 402 `insufficient_credits`; 400 `empty_project` / `too_long` (> 300 s) |
 | `GET /api/render/:jobId` | `{ status, progress, url, expiresAt, watermark }` |
 | `GET /api/render/:jobId/link` | new signed link valid for 7 days |
@@ -350,6 +376,21 @@ Error format: `{ error: <code>, message }` — the frontend client reads `error`
 **Storage layer** (`server/src/storage`): interface `put(key, srcPath)`, `localPath(key)`, `remove(key)`, `publicUrl(key)`, `signedUrl(key, expiresAt)`, `verify(key, exp, sig)`. Currently `local.js` (DATA_DIR/files); for stage 3 an R2 driver with the same interface is plugged into `storage/index.js`.
 
 **Remote files**: the server downloads library and Pexels files only from an allow-list of hosts (Unsplash, Pexels, SoundHelix, test-videos.co.uk, MDN, samplelib) and caches them in DATA_DIR/cache.
+
+### Editor interface (since 0.3.0)
+
+- **"What to do next"** bar above the canvas: ① Add music → ② Add photos or videos → ③ Build the video, with check marks; the current step is highlighted and a click opens the matching block. Once 1 and 2 are done a large "Build video" button appears; while rendering the bar shows the progress in large type, afterwards "Watch video".
+- Larger blocks (title 14 px, description 13 px) with one plain-language line under the title; default layout 3 × 2, "Arrange" lays out in 3 columns (below 768 px: 2).
+- Every button has a label and a tooltip (`title`); tricky options have a grey explanation below. Optional settings live in an **"Advanced"** section: the whole style (except "Cut on the beat") and montage fine-tuning; "Brand" in the sidebar sits under "Advanced".
+- Properties panel: default width 33 % of the window (min. 380 px, max. 60 %), resizable by dragging its left edge, width stored in `localStorage` (`fv_panel_width`); base font 15 px, buttons ≥ 44 px. Mobile: bottom sheet at 85 % height.
+- When a render finishes, a large player opens automatically (download MP4, copy link, export page, close) — only for renders started in the current session.
+- Media library (picker in the Visual block and the `/library` page): search field, photos/videos filter, orientation matching the project format (9:16 → portrait), loading more on scroll, mood/niche as quick suggestions, author (Pexels) in small print on the preview, strip of selected items.
+
+**Video length** (`lengthMode` in the project, logic in `server/src/shared/timeline.js`, shared by frontend and backend):
+- `track` — as long as the track (default for "music video"); `15` / `30` / `60` — fixed length; `timeline` — sum of the montage lengths (default for promo and reels).
+- With `track` and fixed lengths the clips are spread evenly over the length; each shot lasts about the average montage clip length, too few clips repeat in order; with "Cut on the beat" the cuts sit on the nearest beat.
+- Over 300 s: notice in the editor with "Cut to 5:00" (`lengthMode = 300`); otherwise the backend answers 400 `too_long`.
+- Cost = `renderCost(plannedDuration(project))` — the same function in the frontend (display) and the backend (billing).
 
 ### Environment variables (backend, `server/.env.example`)
 
@@ -376,7 +417,8 @@ cd server
 npm install
 cp .env.example .env             # adjust values
 npm start                        # http://localhost:8080
-npm run smoke                    # end-to-end test with its own server and a temporary DATA_DIR
+npm run smoke                    # end-to-end test with its own server, a temporary DATA_DIR and a Pexels stand-in
+node scripts/fake-pexels.mjs     # Pexels stand-in on :18999 (PEXELS_API_BASE=http://127.0.0.1:18999)
 
 # frontend against the local backend
 VITE_API_URL=http://localhost:8080 npm run dev
@@ -385,12 +427,13 @@ VITE_API_URL=http://localhost:8080 npm run dev
 ### Deployment
 
 - **Frontend**: Render Static Site, project "My project", https://factory-video.onrender.com; build `npm ci && npm run build`, publish `./dist`, rewrite `/*` → `/index.html`, auto-deploy on push to `main`.
-- **Backend**: second service `factory-video-api` in `render.yaml` (type web, runtime node, rootDir `server`, build `npm ci`, start `npm start`, health check `/api/health`; env: `JWT_SECRET` generated, `PEXELS_API_KEY` and `PUBLIC_URL` set manually, `FRONTEND_ORIGIN=https://factory-video.onrender.com`, `DATA_DIR=./data`). As of 2026-09-26 the service has not been created yet.
+- **Backend**: second service `factory-video-api` in `render.yaml` (type web, runtime node, rootDir `server`, build `npm ci`, start `npm start`, health check `/api/health`; env: `JWT_SECRET` generated, `PEXELS_API_KEY` and `PUBLIC_URL` set manually, `FRONTEND_ORIGIN=https://factory-video.onrender.com`, `DATA_DIR=./data`). The service runs at https://factory-video-api.onrender.com; whether `PEXELS_API_KEY` is set there: **UNKNOWN**.
 - Afterwards set `VITE_API_URL` on the static site to the API service URL and redeploy; otherwise the frontend keeps running on mocks.
 - Instance type / plan of the API service: **UNKNOWN**.
 
 ### Current state
 
+- 0.3.0 (2026-09-27): editor rework after the owner's first test in production. Verified locally: `npx tsc --noEmit`, `npm run build`; `npm run smoke` (99/99); headless Chrome against the local backend with a Pexels stand-in (`server/scripts/fake-pexels.mjs`): 21/21 — incl. music video with a 1:50 track → MP4 of 110.03 s = track, 3 specifically picked photos end up exactly in the project (even when an older, slower search answers afterwards), search "singer stage" returns results, loading more on scroll, the player opens by itself after rendering, panel 475 px (33 % of 1440) and resizable, mobile bottom sheet 85 %, no JS errors. Screenshots: `docs/screenshots/0.3.0/` (library shown with the Pexels stand-in, hence "Fixture Photographer"). Not verified against the real Pexels API (no key available): **UNKNOWN**.
 - Stage 0 ✔, stage 1 ✔, stage 2 (backend MVP) ✔ locally; not deployed to Render yet.
 - Verified (locally, 2026-09-26):
   - `npx tsc --noEmit` and `npm run build` (frontend) without errors.
@@ -423,11 +466,20 @@ Render times and memory on Render: **UNKNOWN** (depend on the instance type).
 - Links to renders: HMAC-signed, 7 days; uploads: unsigned, unguessable UUID paths.
 - Frontend adjustments resulting from mock vs. real operation: see CHANGELOG 0.2.0.
 
+- Length and cost logic lives once in `server/src/shared/timeline.js` (JS + `.d.ts`); the frontend imports it directly (`src/lib/project.ts`, `src/config/pricing.ts`) so display and billing can never diverge.
+- Pexels search: the typed text is sent unchanged, with `locale` = UI language (`de-DE` / `en-US` / `ru-RU`). According to its documentation the Pexels API supports multilingual search via `locale`; an own dictionary would only cover common words and distort phrases. Quick suggestions (mood/niche) send fixed English terms with `en-US`.
+- Library orientation follows the project format (9:16 → `portrait`, 16:9 → `landscape`, 1:1 → `square`), can be switched off.
+- Before every render the project is saved (pending changes and a running save are awaited), because the backend renders the saved state.
+- Cause of the "different photos get added" bug: see CHANGELOG 0.3.0.
+
 ### Limitations
 
 - **DATA_DIR is lost on every redeploy on Render** (no persistent disk). Accepted until stage 3 (R2): users, projects, uploads and renders disappear; issued JWTs become invalid if `JWT_SECRET` is regenerated.
 - Only one server instance is possible (JSON files + in-process queue).
-- The frontend offers 12 fonts, the renderer knows 4 (Inter, Montserrat, Bebas Neue, Playfair Display); all others are rendered as Inter in the video. Bebas Neue has no Cyrillic glyphs → Cyrillic lines use Inter.
+- The frontend offers 12 fonts, the renderer knows 4 (Inter, Montserrat, Bebas Neue, Playfair Display); all others are rendered as Inter in the video — marked with "*" in the Style panel. Bebas Neue has no Cyrillic glyphs → Cyrillic lines use Inter.
+- Quality of multilingual Pexels search (DE/RU) with a real key: **UNKNOWN**. Without a key the search only matches title, mood and niche of the static list.
+- The panel width can be dragged only from 1024 px window width; the player opens automatically only for renders from the current session.
+- Existing projects keep their block positions; the new 3 × 2 layout is available via "Arrange".
 - Beat detection: slow tracks may be detected at double tempo (synthetic 75 BPM track → 150 BPM). The true tempo of the SoundHelix library tracks is **UNKNOWN**; measured: 132–148 BPM.
 - The `bpm` and `duration` values in the library list (`src/lib/libraryData.ts`, `server/src/libraryData.js`) are stage-1 placeholders and partly differ from the files (e.g. track 1: 124 vs. measured 135 BPM; track 6: 307 s vs. 279.6 s). `/api/audio/analyze` returns the measured values.
 - On Render, text is rendered only with the bundled fonts via fontconfig/libass; whether fontconfig works cleanly on Render without system fonts: **UNKNOWN** (verified locally).
@@ -440,7 +492,7 @@ Render times and memory on Render: **UNKNOWN** (depend on the instance type).
 
 ### Next steps
 
-1. Create the `factory-video-api` service on Render, set `PUBLIC_URL` and optionally `PEXELS_API_KEY`, then set `VITE_API_URL` on the static site and redeploy; measure render time and memory there.
+1. On Render: check whether `PEXELS_API_KEY` is set and test the Pexels search (DE/RU) with a real key; measure render time and memory there.
 2. Stage 3: videos and uploads in Cloudflare R2 (R2 driver for `server/src/storage`), links, history; a database instead of JSON files (choice **UNKNOWN**).
 3. Stage 4: Polar (credits/subscription, webhooks), checkout and portal instead of 501.
 4. Stage 5: integration with Website-SDK (webstudio-sdk-muenchen.com) via API.
@@ -461,7 +513,7 @@ LLM — только оркестратор (порядок блоков, тек
 
 - Репозиторий: https://github.com/IgorUspehov/-Factory-Video- (ветка `main`)
 - Фронтенд в продакшене: https://factory-video.onrender.com
-- Бэкенд в продакшене: ещё не создан (см. «Деплой»).
+- Бэкенд в продакшене: https://factory-video-api.onrender.com (создан владельцем; `/api/health` отвечает 200).
 
 ### Требования
 
@@ -547,7 +599,7 @@ server/
 | `POST /api/upload/media` | JPG/PNG/WEBP, MP4/MOV/WEBM/M4V, ≤ 200 МБ, проверка ffprobe |
 | `POST /api/audio/analyze` | `{ duration, bpm, beats[], peaks[] }` для своей загрузки или трека библиотеки; результат кэшируется |
 | `GET /api/library/audio?mood=&niche=` | статический список треков |
-| `GET /api/library/media?mood=&niche=&kind=` | Pexels (фото + видео) или статический список; заголовок `X-Library-Source` |
+| `GET /api/library/media?q=&kind=&orientation=&page=&lang=&mood=&niche=` | поиск Pexels (фото + видео, с `credit` = автор) или статический список; одна страница за вызов, пустой список = страниц больше нет; заголовок `X-Library-Source` |
 | `POST /api/render` | `{ jobId, cost }`; стоимость по `renderCost`; 402 `insufficient_credits`; 400 `empty_project` / `too_long` (> 300 с) |
 | `GET /api/render/:jobId` | `{ status, progress, url, expiresAt, watermark }` |
 | `GET /api/render/:jobId/link` | новая подписанная ссылка на 7 дней |
@@ -572,6 +624,21 @@ server/
 **Слой хранения** (`server/src/storage`): интерфейс `put(key, srcPath)`, `localPath(key)`, `remove(key)`, `publicUrl(key)`, `signedUrl(key, expiresAt)`, `verify(key, exp, sig)`. Сейчас `local.js` (DATA_DIR/files); на этапе 3 в `storage/index.js` подключается драйвер R2 с тем же интерфейсом.
 
 **Внешние файлы**: сервер скачивает файлы библиотеки и Pexels только с разрешённых хостов (Unsplash, Pexels, SoundHelix, test-videos.co.uk, MDN, samplelib) и кэширует их в DATA_DIR/cache.
+
+### Интерфейс редактора (с 0.3.0)
+
+- Полоса **«Что делать дальше»** над холстом: ① Добавь музыку → ② Добавь фото или видео → ③ Собери ролик, с галочками; текущий шаг подсвечен, клик открывает нужный блок. Когда шаги 1 и 2 выполнены, появляется большая кнопка «Собрать ролик»; во время рендера полоса крупно показывает прогресс, после — «Смотреть ролик».
+- Блоки крупнее (заголовок 14 px, описание 13 px) с одной строкой простым языком под заголовком; раскладка по умолчанию 3 × 2, «Упорядочить» раскладывает в 3 колонки (меньше 768 px — в 2).
+- У каждой кнопки есть подпись и подсказка (`title`); под сложными опциями — серое пояснение. Необязательные настройки — в разделе **«Дополнительно»**: весь «Стиль» (кроме «Склейки под бит») и тонкая настройка «Монтажа»; «Бренд» в боковом меню спрятан под «Дополнительно».
+- Панель свойств: ширина по умолчанию 33 % окна (мин. 380 px, макс. 60 %), левый край тянется мышью, ширина хранится в `localStorage` (`fv_panel_width`); базовый шрифт 15 px, кнопки ≥ 44 px. На мобильном — нижняя шторка на 85 % высоты.
+- Когда рендер готов, автоматически открывается крупный плеер (скачать MP4, скопировать ссылку, страница экспорта, закрыть) — только для рендеров, запущенных в текущей сессии.
+- Медиатека (выбор в блоке «Визуал» и страница `/library`): поле поиска, фильтр «Фото / Видео», ориентация под формат проекта (9:16 → вертикальные), подгрузка при прокрутке, настроение/ниша как быстрые подсказки, автор (Pexels) мелким текстом на превью, полоса выбранных элементов.
+
+**Длина ролика** (`lengthMode` в проекте, логика в `server/src/shared/timeline.js`, общая для фронтенда и бэкенда):
+- `track` — длина трека (по умолчанию для «Клипа под трек»); `15` / `30` / `60` — фиксированная длина; `timeline` — сумма длительностей монтажа (по умолчанию для промо и Reels).
+- При `track` и фиксированной длине кадры распределяются равномерно; каждый кадр держится примерно среднюю длительность из монтажа, если кадров мало — они повторяются по кругу; при «Склейке под бит» склейки попадают на ближайший бит.
+- Больше 300 с: предупреждение в редакторе с кнопкой «Обрезать до 5:00» (`lengthMode = 300`); иначе бэкенд отвечает 400 `too_long`.
+- Стоимость = `renderCost(plannedDuration(project))` — одна и та же функция во фронтенде (показ) и бэкенде (списание).
 
 ### Переменные окружения (бэкенд, `server/.env.example`)
 
@@ -598,7 +665,8 @@ cd server
 npm install
 cp .env.example .env             # заполнить значения
 npm start                        # http://localhost:8080
-npm run smoke                    # сквозной тест со своим сервером и временным DATA_DIR
+npm run smoke                    # сквозной тест со своим сервером, временным DATA_DIR и имитацией Pexels
+node scripts/fake-pexels.mjs     # имитация Pexels на :18999 (PEXELS_API_BASE=http://127.0.0.1:18999)
 
 # фронтенд против локального бэкенда
 VITE_API_URL=http://localhost:8080 npm run dev
@@ -607,12 +675,13 @@ VITE_API_URL=http://localhost:8080 npm run dev
 ### Деплой
 
 - **Фронтенд**: Render Static Site, проект «My project», https://factory-video.onrender.com; сборка `npm ci && npm run build`, публикация `./dist`, Rewrite `/*` → `/index.html`, автодеплой при push в `main`.
-- **Бэкенд**: второй сервис `factory-video-api` в `render.yaml` (type web, runtime node, rootDir `server`, сборка `npm ci`, запуск `npm start`, health check `/api/health`; env: `JWT_SECRET` генерируется, `PEXELS_API_KEY` и `PUBLIC_URL` задаются вручную, `FRONTEND_ORIGIN=https://factory-video.onrender.com`, `DATA_DIR=./data`). На 2026-09-26 сервис ещё не создан.
+- **Бэкенд**: второй сервис `factory-video-api` в `render.yaml` (type web, runtime node, rootDir `server`, сборка `npm ci`, запуск `npm start`, health check `/api/health`; env: `JWT_SECRET` генерируется, `PEXELS_API_KEY` и `PUBLIC_URL` задаются вручную, `FRONTEND_ORIGIN=https://factory-video.onrender.com`, `DATA_DIR=./data`). Сервис работает на https://factory-video-api.onrender.com; задан ли там `PEXELS_API_KEY` — **UNKNOWN**.
 - После этого в статическом сайте задать `VITE_API_URL` = URL API-сервиса и передеплоить; иначе фронтенд продолжит работать на моках.
 - Тип инстанса / тариф API-сервиса: **UNKNOWN**.
 
 ### Текущее состояние
 
+- 0.3.0 (2026-09-27): переработка редактора по итогам первого теста владельца на проде. Проверено локально: `npx tsc --noEmit`, `npm run build`; `npm run smoke` (99/99); headless Chrome против локального бэкенда с имитацией Pexels (`server/scripts/fake-pexels.mjs`): 21/21 — в том числе клип с треком 1:50 → MP4 110,03 с = трек, 3 конкретно выбранных фото попадают в проект именно они (даже если после них отвечает более старый медленный поиск), поиск «singer stage» возвращает результаты, подгрузка при прокрутке, плеер открывается сам после рендера, панель 475 px (33 % от 1440) и тянется, на мобильном шторка 85 %, нет JS-ошибок. Скриншоты: `docs/screenshots/0.3.0/` (медиатека снята с имитацией Pexels, поэтому «Fixture Photographer»). Против настоящего Pexels API не проверено (ключа нет): **UNKNOWN**.
 - Этап 0 ✔, этап 1 ✔, этап 2 (бэкенд MVP) ✔ локально; на Render ещё не задеплоен.
 - Проверено (локально, 2026-09-26):
   - `npx tsc --noEmit` и `npm run build` (фронтенд) без ошибок.
@@ -645,11 +714,20 @@ VITE_API_URL=http://localhost:8080 npm run dev
 - Ссылки на рендеры: подпись HMAC, 7 дней; загрузки: без подписи, по неугадываемому пути с UUID.
 - Изменения фронтенда по итогам работы с настоящим бэкендом — в CHANGELOG 0.2.0.
 
+- Логика длины и стоимости — один раз в `server/src/shared/timeline.js` (JS + `.d.ts`); фронтенд импортирует её напрямую (`src/lib/project.ts`, `src/config/pricing.ts`), поэтому показ и списание не расходятся.
+- Поиск Pexels: введённый текст отправляется как есть, с `locale` = язык интерфейса (`de-DE` / `en-US` / `ru-RU`). По документации Pexels API поддерживает многоязычный поиск через `locale`; собственный словарь покрыл бы только частые слова и искажал бы фразы. Быстрые подсказки (настроение/ниша) отправляют фиксированные английские запросы с `en-US`.
+- Ориентация в медиатеке следует формату проекта (9:16 → `portrait`, 16:9 → `landscape`, 1:1 → `square`), её можно отключить.
+- Перед каждым рендером проект сохраняется (с ожиданием отложенных изменений и текущего сохранения), потому что бэкенд рендерит сохранённое состояние.
+- Причина ошибки «добавляются не те фото» — см. CHANGELOG 0.3.0.
+
 ### Ограничения
 
 - **DATA_DIR теряется при каждом редеплое на Render** (нет постоянного диска). До этапа 3 (R2) это допустимо: пользователи, проекты, загрузки и рендеры пропадают; выданные JWT становятся недействительными, если `JWT_SECRET` сгенерирован заново.
 - Возможен только один инстанс сервера (JSON-файлы + очередь в процессе).
-- Фронтенд предлагает 12 шрифтов, рендер знает 4 (Inter, Montserrat, Bebas Neue, Playfair Display); остальные в видео заменяются на Inter. В Bebas Neue нет кириллицы → кириллические строки набираются Inter.
+- Фронтенд предлагает 12 шрифтов, рендер знает 4 (Inter, Montserrat, Bebas Neue, Playfair Display); остальные в видео заменяются на Inter — в панели «Стиль» они отмечены «*». В Bebas Neue нет кириллицы → кириллические строки набираются Inter.
+- Качество многоязычного поиска Pexels (DE/RU) с настоящим ключом — **UNKNOWN**. Без ключа поиск ищет только по названию, настроению и нише статического списка.
+- Ширину панели можно тянуть только при ширине окна от 1024 px; плеер открывается автоматически только для рендеров из текущей сессии.
+- Существующие проекты сохраняют расположение блоков; новая раскладка 3 × 2 — через «Упорядочить».
 - Определение бита: медленные треки могут определяться с удвоенным темпом (синтетический трек 75 BPM → 150 BPM). Истинный темп треков SoundHelix из библиотеки — **UNKNOWN**; измерено 132–148 BPM.
 - Значения `bpm` и `duration` в списке библиотеки (`src/lib/libraryData.ts`, `server/src/libraryData.js`) — плейсхолдеры этапа 1 и частично не совпадают с файлами (например, трек 1: 124 против измеренных 135 BPM; трек 6: 307 с против 279,6 с). `/api/audio/analyze` возвращает измеренные значения.
 - На Render текст рисуется только поставляемыми шрифтами через fontconfig/libass; работает ли fontconfig на Render без системных шрифтов — **UNKNOWN** (проверено локально).
@@ -662,7 +740,7 @@ VITE_API_URL=http://localhost:8080 npm run dev
 
 ### Следующие шаги
 
-1. Создать сервис `factory-video-api` на Render, задать `PUBLIC_URL` и при желании `PEXELS_API_KEY`, затем задать `VITE_API_URL` в статическом сайте и передеплоить; измерить время рендера и память там.
+1. На Render: проверить, задан ли `PEXELS_API_KEY`, и протестировать поиск Pexels (DE/RU) с настоящим ключом; измерить время рендера и память там.
 2. Этап 3: видео и загрузки в Cloudflare R2 (драйвер R2 для `server/src/storage`), ссылки, история; БД вместо JSON-файлов (выбор **UNKNOWN**).
 3. Этап 4: Polar (кредиты/подписка, вебхуки), checkout и портал вместо 501.
 4. Этап 5: интеграция с Website-SDK (webstudio-sdk-muenchen.com) через API.

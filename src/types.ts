@@ -16,6 +16,15 @@ export type NodeKind = 'audio' | 'visual' | 'text' | 'style' | 'montage' | 'outp
 export type TextMode = 'titles' | 'slogan' | 'lyrics';
 export type Transition = 'cut' | 'fade' | 'zoom' | 'slide';
 export type RenderStatus = 'idle' | 'queued' | 'rendering' | 'done' | 'failed';
+/** 'timeline' = montage length, 'track' = whole track, number = fixed seconds. */
+export type LengthMode = 'timeline' | 'track' | number;
+
+export interface MediaCredit {
+  name?: string;
+  url?: string;
+  source?: string;
+  page?: string;
+}
 
 export interface AudioTrack {
   source: 'upload' | 'library' | 'none';
@@ -37,6 +46,7 @@ export interface MediaItem {
   name: string;
   duration?: number;
   source: 'upload' | 'library';
+  credit?: MediaCredit;
 }
 
 export interface LyricLine {
@@ -94,6 +104,8 @@ export interface Project {
   format: Format;
   mood: Mood;
   textMode: TextMode;
+  /** missing in projects created before 0.3.0 → default by goal (see server/src/shared/timeline.js) */
+  lengthMode?: LengthMode;
   nodes: FlowNodeData[];
   edges: FlowEdgeData[];
   audio: AudioTrack | null;
@@ -125,9 +137,11 @@ export interface LibraryMedia {
   title: string;
   url: string;
   thumb: string;
-  mood: Mood;
-  niche: Niche;
+  /** set for static items and chip searches; absent for free-text Pexels results */
+  mood?: Mood;
+  niche?: Niche;
   duration?: number;
+  credit?: MediaCredit;
 }
 
 export interface UploadResult {

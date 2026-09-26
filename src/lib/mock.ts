@@ -212,8 +212,14 @@ export async function mockRequest<T>(method: string, fullPath: string, body: Bod
     const mood = query.get('mood');
     const niche = query.get('niche');
     const kind = query.get('kind');
+    const words = (query.get('q') ?? '').toLowerCase().split(/\s+/).filter(Boolean);
+    if (Number(query.get('page') ?? 1) > 1) return [] as T;
     return [...libraryPhotos, ...libraryVideos].filter(
-      (i) => (!mood || i.mood === mood) && (!niche || i.niche === niche) && (!kind || i.kind === kind),
+      (i) =>
+        (!mood || i.mood === mood) &&
+        (!niche || i.niche === niche) &&
+        (!kind || i.kind === kind) &&
+        (!words.length || words.some((w) => `${i.title} ${i.mood} ${i.niche}`.toLowerCase().includes(w))),
     ) as T;
   }
 

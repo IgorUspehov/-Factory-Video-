@@ -11,7 +11,8 @@ import { MOODS, NICHES, moodKey, nicheKey } from '../lib/labels';
 import { Waveform } from '../components/Waveform';
 import { Modal } from '../components/Modal';
 import { Spinner } from '../components/Spinner';
-import type { LibraryMedia, LibraryTrack, MediaItem, Mood, Niche } from '../types';
+import { MediaBrowser } from '../components/MediaBrowser';
+import type { LibraryTrack, MediaItem, Mood, Niche } from '../types';
 
 type Tab = 'audio' | 'video' | 'photo' | 'uploads';
 const TABS: { id: Tab; icon: LucideIcon; label: TKey }[] = [
@@ -27,7 +28,6 @@ export default function Library() {
   const [mood, setMood] = useState<Mood | ''>('');
   const [niche, setNiche] = useState<Niche | ''>('');
   const [tracks, setTracks] = useState<LibraryTrack[] | null>(null);
-  const [media, setMedia] = useState<LibraryMedia[] | null>(null);
   const [uploads, setUploads] = useState<MediaItem[]>(uploadsStore.list);
   const [open, setOpen] = useState<{ kind: 'image' | 'video'; url: string; title: string } | null>(null);
   const preview = useAudioPreview();
@@ -36,13 +36,7 @@ export default function Library() {
     if (tab === 'audio') {
       setTracks(null);
       api.libraryAudio(mood || undefined, niche || undefined).then(setTracks).catch(() => setTracks([]));
-    } else if (tab === 'video' || tab === 'photo') {
-      setMedia(null);
-      api
-        .libraryMedia({ mood: mood || undefined, niche: niche || undefined, kind: tab === 'video' ? 'video' : 'image' })
-        .then(setMedia)
-        .catch(() => setMedia([]));
-    } else {
+    } else if (tab === 'uploads') {
       setUploads(uploadsStore.list());
     }
   }, [tab, mood, niche]);
@@ -98,7 +92,7 @@ export default function Library() {
         ))}
       </div>
 
-      {tab !== 'uploads' && (
+      {tab === 'audio' && (
         <div className="mt-6">
           <Chips />
         </div>
@@ -139,37 +133,14 @@ export default function Library() {
             </ul>
           ))}
 
-        {(tab === 'video' || tab === 'photo') &&
-          (media === null ? (
-            <Spinner full />
-          ) : media.length === 0 ? (
-            empty
-          ) : (
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-              {media.map((m) => (
-                <button
-                  key={m.id}
-                  onClick={() => setOpen({ kind: m.kind, url: m.url, title: m.title })}
-                  className="card group relative aspect-square overflow-hidden text-left"
-                >
-                  <img src={m.thumb} alt={m.title} loading="lazy" className="h-full w-full object-cover transition duration-500 group-hover:scale-105" />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-transparent" />
-                  {m.kind === 'video' && (
-                    <span className="icon-tile absolute left-1/2 top-1/2 h-12 w-12 -translate-x-1/2 -translate-y-1/2 rounded-full bg-black/60">
-                      <Play size={18} />
-                    </span>
-                  )}
-                  <div className="absolute inset-x-3 bottom-3">
-                    <div className="truncate text-sm font-semibold">{m.title}</div>
-                    <div className="text-[11px] text-white/70">
-                      {t(moodKey[m.mood])} · {t(nicheKey[m.niche])}
-                      {m.duration ? ` · ${m.duration}s` : ''}
-                    </div>
-                  </div>
-                </button>
-              ))}
-            </div>
-          ))}
+        {(tab === 'video' || tab === 'photo') && (
+          <MediaBrowser
+            key={tab}
+            mode="browse"
+            fixedKind={tab === 'video' ? 'video' : 'image'}
+            onOpen={(m) => setOpen({ kind: m.kind, url: m.url, title: m.title })}
+          />
+        )}
 
         {tab === 'uploads' &&
           (uploads.length === 0 ? (

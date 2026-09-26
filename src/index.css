@@ -112,6 +112,40 @@
   animation: pulse-glow 2.4s ease-in-out infinite;
 }
 
+/* ---------- editor properties panel: larger type and touch targets ---------- */
+.panel {
+  font-size: 15px;
+  line-height: 1.45;
+}
+.panel .btn {
+  min-height: 44px;
+  font-size: 14px;
+}
+.panel .btn-sm {
+  padding-left: 0.9rem;
+  padding-right: 0.9rem;
+}
+.panel .input {
+  min-height: 44px;
+  font-size: 15px;
+}
+.panel .chip {
+  min-height: 38px;
+  font-size: 13px;
+  padding-left: 0.85rem;
+  padding-right: 0.85rem;
+}
+.panel .label-caps {
+  font-size: 11px;
+}
+.panel .text-xs {
+  font-size: 13px;
+}
+.panel .text-\[11px\],
+.panel .text-\[10px\] {
+  font-size: 12px;
+}
+
 /* ---------- React Flow dark theme ---------- */
 .react-flow {
   --xy-background-color: #0b0b0d;

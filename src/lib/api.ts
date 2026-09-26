@@ -151,8 +151,9 @@ export const api = {
 
   // library
   libraryAudio: (mood?: string, niche?: string) => request<LibraryTrack[]>('GET', `/api/library/audio${qs({ mood, niche })}`),
-  libraryMedia: (params: { mood?: string; niche?: string; kind?: string } = {}) =>
-    request<LibraryMedia[]>('GET', `/api/library/media${qs(params)}`),
+  /** One page of media; an empty array means there are no more pages. */
+  libraryMedia: (params: { q?: string; mood?: string; niche?: string; kind?: string; orientation?: string; page?: number; lang?: string } = {}) =>
+    request<LibraryMedia[]>('GET', `/api/library/media${qs({ ...params, page: params.page ? String(params.page) : undefined })}`),
 
   // render
   startRender: (body: { projectId: string; title: string; format: Format; duration: number }) =>

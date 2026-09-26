@@ -8,7 +8,21 @@
 
 ### [Unreleased]
 
-- Dokumentation: `README.md`, `CHANGELOG.md`, `CLAUDE.md` (DE/EN/RU). Code unverändert.
+- —
+
+### [0.2.0] — 2026-09-26
+
+Backend-MVP (Etappe 2) in `server/` und Anpassungen des Frontends.
+
+- Dokumentation: `README.md`, `CHANGELOG.md`, `CLAUDE.md` (DE/EN/RU) — Commit `4982d90`.
+- Backend (Node 22, ESM, Express 5): Auth (bcrypt, JWT), `/api/me`, Projekt-CRUD mit Nutzerbindung, Uploads (Audio mit Pflichtfeld `rightsConfirmed`, Foto/Video, Prüfung per ffprobe), `/api/audio/analyze` (music-tempo im Worker-Thread), Bibliothek (Pexels oder statische Liste), Render-Warteschlange (1 Job) mit FFmpeg-Pipeline (720p-Formate, 30 fps, H.264 + AAC, Ken Burns, xfade-Übergänge, Schnitte im Takt, Text und Wasserzeichen über libass, loudnorm, Fades), signierte Links (7 Tage), regelbasierter Assistent, Billing-Platzhalter (501) und echte Render-Historie, `/api/health`.
+- Speicherschicht `server/src/storage` (lokale Platte, austauschbar gegen R2).
+- Schriften Inter, Montserrat, Bebas Neue, Playfair Display (OFL, mit Lizenztexten) in `server/fonts`.
+- Smoke-Test `server/scripts/smoke.mjs`: 80/80 bestanden.
+- `render.yaml`: zweiter Dienst `factory-video-api`.
+- Frontend-Korrektur (Vertrag): `api.uploadAudio(file, rightsConfirmed)` sendet jetzt das Feld `rightsConfirmed`; `AudioPanel` übergibt den Wert der Checkbox.
+- Frontend-Korrektur: `RenderPlayer` legt das Wasserzeichen nur noch im Mock-Modus über das Video, weil das Backend es ins MP4 einbrennt.
+- Prüfung: `npx tsc --noEmit` und `npm run build` ohne Fehler; Headless Chrome: Frontend gegen lokales Backend ohne Fehler.
 
 ### [0.1.0] — 2026-09-26 — Commit `adbf18f`
 
@@ -29,7 +43,21 @@ Erste Version des Frontends.
 
 ### [Unreleased]
 
-- Documentation: `README.md`, `CHANGELOG.md`, `CLAUDE.md` (DE/EN/RU). No code changes.
+- —
+
+### [0.2.0] — 2026-09-26
+
+Backend MVP (stage 2) in `server/` and frontend adjustments.
+
+- Documentation: `README.md`, `CHANGELOG.md`, `CLAUDE.md` (DE/EN/RU) — commit `4982d90`.
+- Backend (Node 22, ESM, Express 5): auth (bcrypt, JWT), `/api/me`, project CRUD bound to the user, uploads (audio with required `rightsConfirmed` field, photo/video, validated with ffprobe), `/api/audio/analyze` (music-tempo in a worker thread), library (Pexels or static list), render queue (1 job) with an FFmpeg pipeline (720p formats, 30 fps, H.264 + AAC, Ken Burns, xfade transitions, beat-synced cuts, text and watermark via libass, loudnorm, fades), signed links (7 days), rule-based assistant, billing stubs (501) and real render history, `/api/health`.
+- Storage layer `server/src/storage` (local disk, replaceable by R2).
+- Fonts Inter, Montserrat, Bebas Neue, Playfair Display (OFL, with licence texts) in `server/fonts`.
+- Smoke test `server/scripts/smoke.mjs`: 80/80 passed.
+- `render.yaml`: second service `factory-video-api`.
+- Frontend fix (contract): `api.uploadAudio(file, rightsConfirmed)` now sends the `rightsConfirmed` field; `AudioPanel` passes the checkbox value.
+- Frontend fix: `RenderPlayer` overlays the watermark only in mock mode, because the backend burns it into the MP4.
+- Verification: `npx tsc --noEmit` and `npm run build` without errors; headless Chrome: frontend against the local backend without errors.
 
 ### [0.1.0] — 2026-09-26 — commit `adbf18f`
 
@@ -50,7 +78,21 @@ First version of the frontend.
 
 ### [Unreleased]
 
-- Документация: `README.md`, `CHANGELOG.md`, `CLAUDE.md` (DE/EN/RU). Код не менялся.
+- —
+
+### [0.2.0] — 2026-09-26
+
+Бэкенд MVP (этап 2) в `server/` и правки фронтенда.
+
+- Документация: `README.md`, `CHANGELOG.md`, `CLAUDE.md` (DE/EN/RU) — коммит `4982d90`.
+- Бэкенд (Node 22, ESM, Express 5): авторизация (bcrypt, JWT), `/api/me`, CRUD проектов с привязкой к пользователю, загрузки (аудио с обязательным полем `rightsConfirmed`, фото/видео, проверка ffprobe), `/api/audio/analyze` (music-tempo в worker-потоке), библиотека (Pexels или статический список), очередь рендера (1 задача) с конвейером FFmpeg (форматы 720p, 30 fps, H.264 + AAC, Ken Burns, переходы xfade, склейки под бит, текст и водяной знак через libass, loudnorm, fade), подписанные ссылки (7 дней), помощник на правилах, заглушки оплаты (501) и реальная история рендеров, `/api/health`.
+- Слой хранения `server/src/storage` (локальный диск, заменяется на R2).
+- Шрифты Inter, Montserrat, Bebas Neue, Playfair Display (OFL, с текстами лицензий) в `server/fonts`.
+- Smoke-тест `server/scripts/smoke.mjs`: 80/80 пройдено.
+- `render.yaml`: второй сервис `factory-video-api`.
+- Исправление фронтенда (контракт): `api.uploadAudio(file, rightsConfirmed)` теперь отправляет поле `rightsConfirmed`; `AudioPanel` передаёт значение чекбокса.
+- Исправление фронтенда: `RenderPlayer` накладывает водяной знак только в режиме моков, потому что бэкенд вшивает его в MP4.
+- Проверка: `npx tsc --noEmit` и `npm run build` без ошибок; headless Chrome: фронтенд против локального бэкенда без ошибок.
 
 ### [0.1.0] — 2026-09-26 — коммит `adbf18f`
 

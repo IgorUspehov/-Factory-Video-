@@ -11,3 +11,21 @@ services:
     envVars:
       - key: VITE_API_URL
         sync: false
+  - type: web
+    name: factory-video-api
+    runtime: node
+    rootDir: server
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: JWT_SECRET
+        generateValue: true
+      - key: PEXELS_API_KEY
+        sync: false
+      - key: FRONTEND_ORIGIN
+        value: https://factory-video.onrender.com
+      - key: DATA_DIR
+        value: ./data
+      - key: PUBLIC_URL
+        sync: false

@@ -140,7 +140,11 @@ export const api = {
   },
 
   // uploads
-  uploadAudio: (file: File) => request<UploadResult>('POST', '/api/upload/audio', withFile(file)),
+  uploadAudio: (file: File, rightsConfirmed: boolean) => {
+    const fd = withFile(file);
+    fd.append('rightsConfirmed', String(rightsConfirmed));
+    return request<UploadResult>('POST', '/api/upload/audio', fd);
+  },
   uploadMedia: (file: File) => request<UploadResult>('POST', '/api/upload/media', withFile(file)),
   analyzeAudio: (body: { id: string; url?: string; duration?: number; bpm?: number }) =>
     request<AudioAnalysis>('POST', '/api/audio/analyze', body),

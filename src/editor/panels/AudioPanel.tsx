@@ -41,7 +41,7 @@ export function AudioPanel() {
     if (file.size > MAX_AUDIO_BYTES) return setError(t('audio.errors.size'));
     setBusy(true);
     try {
-      const [uploaded, duration, peaks] = await Promise.all([api.uploadAudio(file), audioDuration(file), computePeaks(file)]);
+      const [uploaded, duration, peaks] = await Promise.all([api.uploadAudio(file, rights), audioDuration(file), computePeaks(file)]);
       const analysis = await api.analyzeAudio({ id: uploaded.id, url: uploaded.url, duration });
       update({
         audio: {

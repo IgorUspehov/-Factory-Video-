@@ -1,6 +1,7 @@
 import { Clapperboard } from 'lucide-react';
 import { useI18n } from '../i18n';
 import { aspectClass, statusKey } from '../lib/labels';
+import { isMockMode } from '../lib/api';
 import type { Format, RenderState } from '../types';
 
 /** Player for a finished render; shows progress while the job is running. */
@@ -12,7 +13,8 @@ export function RenderPlayer({ render, format, className = '' }: { render: Rende
       {render.status === 'done' && render.url ? (
         <>
           <video src={render.url} controls playsInline className="h-full w-full object-contain" />
-          {render.watermark && (
+          {/* the real backend burns the watermark into the MP4; the mock sample video needs an overlay */}
+          {render.watermark && isMockMode() && (
             <span className="pointer-events-none absolute bottom-12 right-3 rounded-md bg-black/40 px-2 py-1 font-display text-[11px] font-extrabold tracking-tight text-white/70">
               Factory <span className="text-accent-light">Video</span>
             </span>

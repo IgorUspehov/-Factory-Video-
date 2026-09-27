@@ -146,6 +146,8 @@ export const api = {
     return request<UploadResult>('POST', '/api/upload/audio', fd);
   },
   uploadMedia: (file: File) => request<UploadResult>('POST', '/api/upload/media', withFile(file)),
+  /** PNG depth map for 2.5D parallax */
+  uploadDepth: (png: Blob) => request<UploadResult>('POST', '/api/upload/depth', withFile(new File([png], 'depth.png', { type: 'image/png' }))),
   analyzeAudio: (body: { id: string; url?: string; duration?: number; bpm?: number }) =>
     request<AudioAnalysis>('POST', '/api/audio/analyze', body),
 

@@ -37,6 +37,7 @@ export const pricing = {
 export const limits = {
   audioBytes: 20 * 1024 * 1024,
   mediaBytes: 200 * 1024 * 1024,
+  depthBytes: 8 * 1024 * 1024,
   maxVideoSeconds: MAX_VIDEO_SECONDS,
   renderTimeoutMs: 20 * 60 * 1000,
   linkTtlMs: 7 * 86_400_000,

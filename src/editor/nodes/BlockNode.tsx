@@ -1,6 +1,8 @@
 import { memo } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
-import { Play, Zap } from 'lucide-react';
+import { Layers, Play, Zap } from 'lucide-react';
+import { beatFxOf } from '../../../server/src/shared/effects.js';
+import { beatFxKey } from '../BeatFxPicker';
 import { useEditor } from '../EditorContext';
 import { useI18n } from '../../i18n';
 import { nodeIcon } from '../nodeMeta';
@@ -39,8 +41,9 @@ function Summary({ kind }: { kind: NodeKind }) {
         <div>
           <div className="grid grid-cols-4 gap-1">
             {project.media.slice(0, 8).map((m) => (
-              <div key={m.id} className="aspect-square overflow-hidden rounded-md bg-bg">
+              <div key={m.id} className="relative aspect-square overflow-hidden rounded-md bg-bg">
                 {m.thumb && <img src={m.thumb} alt="" className="h-full w-full object-cover" draggable={false} />}
+                {m.depth && <Layers size={10} className="absolute right-0.5 top-0.5 rounded bg-accent p-px text-white" />}
               </div>
             ))}
           </div>
@@ -64,15 +67,28 @@ function Summary({ kind }: { kind: NodeKind }) {
       );
     case 'style': {
       const s = project.style;
+      const fx = beatFxOf(project);
       return (
-        <div className="flex items-center gap-2">
-          {[s.background, s.accent, s.text].map((c, i) => (
-            <span key={i} className="h-5 w-5 rounded-full border border-white/20" style={{ background: c }} />
-          ))}
-          <span className="ml-1 truncate text-xs" style={{ fontFamily: s.font }}>
-            {s.font}
-          </span>
-          <span className="ml-auto text-[12px] text-muted">{t(transitionKey[s.transition])}</span>
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            {[s.background, s.accent, s.text].map((c, i) => (
+              <span key={i} className="h-5 w-5 rounded-full border border-white/20" style={{ background: c }} />
+            ))}
+            <span className="ml-1 truncate text-xs" style={{ fontFamily: s.font }}>
+              {s.font}
+            </span>
+            <span className="ml-auto text-[12px] text-muted">{t(transitionKey[s.transition])}</span>
+          </div>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px]">
+            <span className={`inline-flex items-center gap-1 ${fx === 'none' ? 'text-muted' : 'text-accent-light'}`} title={t('beatFx.title')}>
+              <Zap size={12} className={fx === 'none' ? '' : 'fill-accent text-accent'} /> {t(beatFxKey[fx])}
+            </span>
+            {s.parallax && (
+              <span className="inline-flex items-center gap-1 text-accent-light" title={t('depth.title')}>
+                <Layers size={12} /> 2.5D
+              </span>
+            )}
+          </div>
         </div>
       );
     }

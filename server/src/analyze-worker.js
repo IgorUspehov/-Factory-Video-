@@ -1,4 +1,3 @@
-import { parentPort, workerData } from 'node:worker_threads';
 import MusicTempo from 'music-tempo';
 import { decodePcm } from './media.js';
 
@@ -42,7 +41,9 @@ function foldOctave(bpm, beats, pcm) {
   return { bpm: Math.round((bpm / 2) * 10) / 10, beats: mean(even) >= mean(odd) ? even : odd };
 }
 
-const { file, beatSeconds } = workerData;
+// runs as a separate process: node analyze-worker.js <file> <beatSeconds> → JSON on stdout
+const [file, beatSecondsArg] = process.argv.slice(2);
+const beatSeconds = Number(beatSecondsArg) || 300;
 // peaks span the whole track (up to 10 min) because the frontend draws them over its full duration
 const pcm = await decodePcm(file, RATE, 600);
 let bpm = 0;
@@ -54,4 +55,4 @@ try {
 } catch {
   /* music-tempo throws on silence / too few onsets — no beats then */
 }
-parentPort.postMessage({ bpm: bpm > 0 ? bpm : 0, beats, peaks: peaks(pcm, PEAKS), samples: pcm.length / RATE });
+process.stdout.write(JSON.stringify({ bpm: bpm > 0 ? bpm : 0, beats, peaks: peaks(pcm, PEAKS), samples: pcm.length / RATE }));

@@ -185,7 +185,7 @@ export async function mockRequest<T>(method: string, fullPath: string, body: Bod
   }
 
   // ---- uploads (files stay in the browser as object URLs)
-  if (route === 'POST /api/upload/audio' || route === 'POST /api/upload/media') {
+  if (route === 'POST /api/upload/audio' || route === 'POST /api/upload/media' || route === 'POST /api/upload/depth') {
     const file = body instanceof FormData ? body.get('file') : null;
     if (!(file instanceof File)) throw new ApiError(400, 'no_file');
     return { id: uid('upl'), url: URL.createObjectURL(file), name: file.name, size: file.size } as T;

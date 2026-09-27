@@ -2,7 +2,7 @@
 
 **DE** · [EN](#english) · [RU](#русский)
 
-Stand der Dokumentation / Documentation as of / Документация актуальна на: **2026-09-27**, Version 0.3.0.
+Stand der Dokumentation / Documentation as of / Документация актуальна на: **2026-09-27**, Version 0.4.0.
 
 ---
 
@@ -101,6 +101,7 @@ server/
 | `GET/POST /api/projects`, `GET/PATCH/DELETE /api/projects/:id` | CRUD, an den Nutzer gebunden (fremde Projekte → 404) |
 | `POST /api/upload/audio` | MP3/WAV/M4A, ≤ 20 MB, Feld `rightsConfirmed=true` Pflicht (sonst 400 `rights_not_confirmed`), Prüfung mit ffprobe |
 | `POST /api/upload/media` | JPG/PNG/WEBP, MP4/MOV/WEBM/M4V, ≤ 200 MB, Prüfung mit ffprobe |
+| `POST /api/upload/depth` | Tiefenkarte (PNG, ≤ 8 MB, ≤ 2048 px) für die Parallaxe; nur eigene Karten werden beim Rendern verwendet |
 | `POST /api/audio/analyze` | `{ duration, bpm, beats[], peaks[] }` für eigenen Upload oder Bibliothekstrack; Ergebnis gecacht |
 | `GET /api/library/audio?mood=&niche=` | statische Trackliste |
 | `GET /api/library/media?q=&kind=&orientation=&page=&lang=&mood=&niche=` | Pexels-Suche (Fotos + Videos, mit `credit` = Urheber) oder statische Liste; eine Seite pro Aufruf, leere Liste = keine weiteren Seiten; Header `X-Library-Source` |
@@ -144,6 +145,14 @@ Fehlerformat: `{ error: <code>, message }` — der Frontend-Client liest `error`
 - Über 300 s: Hinweis im Editor mit „Auf 5:00 kürzen“ (`lengthMode = 300`); das Backend antwortet sonst mit 400 `too_long`.
 - Kosten = `renderCost(plannedDuration(project))` — dieselbe Funktion im Frontend (Anzeige) und im Backend (Abrechnung).
 
+### 2.5D-Parallaxe und Effekte im Takt (seit 0.4.0)
+
+**Tiefenkarten im Browser.** Schalter „Tiefe (2.5D)“ oben im Visual-Block. Beim Einschalten lädt der Browser einmalig transformers.js (eigener Chunk) und das offene Modell **Depth Anything V2 Small** (`onnx-community/depth-anything-v2-small`, ONNX, 8-Bit quantisiert, Datei `model_quantized.onnx` 27,3 MB, Lizenz **Apache-2.0** laut Modellkarte) von Hugging Face sowie ONNX Runtime Web (WASM) vom CDN jsDelivr; beides landet im Browser-Cache. Jedes Foto wird auf höchstens 1280 px (lange Seite) verkleinert, die Tiefe berechnet (hell = nah), eine Vordergrund-Schwelle nach Otsu bestimmt (zwischen 40. und 85. Perzentil) und die Karte als Graustufen-PNG an `POST /api/upload/depth` gesendet; das Medien-Element bekommt `depth: { id, url, threshold }`. Fortschritt „Tiefe wird berechnet: 3 von 15“, Abzeichen auf fertigen Fotos. Videos werden übersprungen.
+
+**Parallaxe im Render** (`parallaxSource` in `server/src/render/pipeline.js`). Gewählte Methode: **zwei Ebenen mit weicher Tiefenmaske** statt `displace`. `displace` bräuchte pro Bild eine zeitabhängige Verschiebungskarte (`geq` pro Pixel und Bild) — auf 0,5 CPU viel zu langsam. Stattdessen werden **einmal pro Foto** zwei Ebenen als PNG vorbereitet (`prepareParallaxLayers`, ≈ 0,5 s, ≈ 150 MB): der leicht vergrößerte Vordergrund mit weicher Alpha-Maske aus der Tiefenkarte (Schwelle + Weichzeichnung) und der Hintergrund, in dem die Fläche des Vordergrunds aus der Umgebung aufgefüllt ist (normalisierte Faltung: Weichzeichnung(Bild × Hintergrundgewicht) ÷ Weichzeichnung(Hintergrundgewicht)) — so zeigt die beim Verschieben freigelegte Kante Hintergrundfarben statt eines Doppelbilds. Pro Teilstück werden beide Ebenen einmal dekodiert und mit `loop` wiederholt; pro Bild laufen nur ein Zuschnitt des Hintergrunds (kleine Drift) und ein Overlay des Vordergrunds (≈ 3× größere Drift) — keine Skalierung pro Bild. Richtung wechselt je Aufnahme. Dauer, Übergänge und Schnitte im Takt bleiben unverändert (dieselbe Teilstück-Logik). Ohne Tiefenkarte (Modell nicht geladen, altes Browser, fremde oder verlorene Datei) → Ken Burns ohne Fehler; Videoclips → nie Parallaxe.
+
+**Effekte im Takt** (`beatFxChain`, Voreinstellungen in `server/src/shared/effects.js`, gemeinsam mit dem Frontend). Voreinstellungen Keine / Sanft / Mittel / Energisch, Standard nach Stimmung (ruhig → Sanft, energetisch → Energisch, Premium → Sanft, Corporate → Keine). Effekte auf den Beats der Analyse: Zoom-„Punch“ und Wackeln (`zoompan`), Blitz (`eq`), Farbpuls (`hue`), kurzer RGB-Glitch (`rgbashift` nur um den Beat aktiv). Sanft = leichter Punch + Farbpuls auf jedem 2. Beat; Mittel = Punch auf jedem Beat, leichtes Wackeln, Blitz auf jedem 2. Beat; Energisch = zusätzlich stärker und Glitch auf jedem 4. Beat. In jedes Teilstück werden nur die Beats geschrieben, die es berühren (kurze Ausdrücke). Ohne Track oder Beats keine Effekte. Die Effekte sind im MP4, Text und Wasserzeichen bleiben ruhig (werden danach eingebrannt). Auswahl neben der Videolänge (Schnitt- und Ausgabe-Panel) und im Stil-Panel; Kurzanzeige im Stil-Block.
+
 ### Umgebungsvariablen (Backend, `server/.env.example`)
 
 | Variable | Bedeutung |
@@ -185,8 +194,9 @@ VITE_API_URL=http://localhost:8080 npm run dev
 
 ### Aktueller Stand
 
+- 0.4.0 (2026-09-27): 2.5D-Parallaxe (Tiefenmodell im Browser) und Effekte im Takt. Lokal geprüft: `npx tsc --noEmit`, `npm run build`; `npm run smoke` (165/165; neu: Upload der Tiefenkarte, Render mit Tiefenkarten, alle Voreinstellungen, Fallback ohne Tiefenkarte, fremde Tiefenkarte, Messungen 30 s / 3 min); Headless Chrome mit **echtem Modell** im Browser (11/11): 3 Fotos → Tiefe 3 von 3, Voreinstellung „Energisch“, Track 1:50 → MP4 = Track, keine JS-Fehler. Bilder aus dem MP4: `docs/screenshots/0.4.0/`. Auf Render nicht geprüft: **UNKNOWN**.
 - 0.3.0 (2026-09-27): Editor-Überarbeitung nach dem ersten Test des Eigentümers in Produktion. Lokal geprüft: `npx tsc --noEmit`, `npm run build`; `npm run smoke` (99/99); Headless Chrome gegen lokales Backend mit Pexels-Attrappe (`server/scripts/fake-pexels.mjs`): 21/21 — u. a. Musikvideo mit 1:50-Track → MP4 110,03 s = Track, 3 gezielt gewählte Fotos landen genau so im Projekt (auch wenn eine ältere, langsamere Suche danach antwortet), Suche „singer stage“ liefert Ergebnisse, Nachladen beim Scrollen, Player öffnet sich nach dem Rendern selbst, Panel 475 px (33 % von 1440) und verstellbar, mobil Bottom-Sheet 85 %, keine JS-Fehler. Screenshots: `docs/screenshots/0.3.0/` (Bibliothek dort mit der Pexels-Attrappe, daher „Fixture Photographer“). Gegen die echte Pexels-API nicht geprüft (kein Schlüssel verfügbar): **UNKNOWN**.
-- Etappe 0 ✔, Etappe 1 ✔, Etappe 2 (Backend-MVP) ✔ lokal; noch nicht auf Render deployt.
+- Etappe 0 ✔, Etappe 1 ✔, Etappe 2 (Backend-MVP) ✔; beide Dienste laufen auf Render (Frontend und API).
 - Geprüft (lokal, 2026-09-26):
   - `npx tsc --noEmit` und `npm run build` (Frontend) ohne Fehler.
   - `npm run smoke`: 80/80 Prüfungen bestanden — u. a. Registrierung/Login, Audio-Upload mit und ohne `rightsConfirmed`, Analyse (synthetischer 120-BPM-Track → 120 BPM), Foto- und Video-Upload, Projekt-CRUD mit Nutzerbindung, Renders in 9:16, 16:9, 1:1 mit fade/slide/cut/zoom (Auflösung, H.264 + AAC, Dauer = Timeline ± 0,1 s, Wasserzeichen), Link-Signatur und -Erneuerung, 402 bei zu wenig Credits, Billing 501, Bibliothek, Assistent.
@@ -198,7 +208,11 @@ VITE_API_URL=http://localhost:8080 npm run dev
 |---|---|
 | 30-s-Video, 9:16, 10 Fotos, Ken Burns, fade, Audio, Text, Wasserzeichen | 33 416 ms Renderzeit, Spitze RSS Server + FFmpeg 367 MB |
 | 30-s-Video, 9:16, 60 Clips à 0,5 s, fade | 58 954 ms, Spitze 332 MB |
-| Beat-Analyse SoundHelix-Track (6:12 min) | ≈ 2,6 s; Spitze RSS des Prozesses ≈ 360–400 MB |
+| Beat-Analyse SoundHelix-Track (6:12 min) | ≈ 2,4 s; Kindprozess bis ≈ 330 MB, danach frei; Serverprozess bleibt bei ≈ 58 MB (seit 0.4.0) |
+| 30-s-Video, 9:16, 10 Fotos, **Parallaxe + „Energisch“**, Schnitt im Takt (0.4.0) | 18 661 ms, Spitze RSS Server + FFmpeg 279 MB |
+| 3-min-Video, 9:16, 10 Fotos, **Parallaxe + „Energisch“**, Schnitt im Takt (0.4.0) | 98 762 ms, Spitze 286 MB |
+| Tiefenkarte im Browser (Headless Chrome, WASM, 1 Foto ≤ 1280 px) | ≈ 9 800–10 800 ms pro Foto (nach dem Laden des Modells) |
+| Download beim ersten Einschalten von „Tiefe“ | Modell 27,3 MB + ONNX-Runtime (WASM) 5,6 (komprimiert; 26,9 entpackt) MB + transformers.js 169 kB (gzip); danach aus dem Browser-Cache |
 | Vorherige Pipeline-Variante (alle Clips in einem xfade-Graphen) | 30 s / 10 Clips: 1119 MB; 60 Clips: ≈ 3,9 GB (FFmpeg allein) — deshalb verworfen |
 
 Renderzeiten und Speicher auf Render: **UNKNOWN** (abhängig vom Instanztyp).
@@ -206,7 +220,7 @@ Renderzeiten und Speicher auf Render: **UNKNOWN** (abhängig vom Instanztyp).
 ### Getroffene Entscheidungen
 
 - FFmpeg nativ über `ffmpeg-static` + `ffprobe-static`, ohne Docker (Eigentümer).
-- **Beat-Erkennung: music-tempo** — reines JavaScript ohne native Abhängigkeiten oder Web-Audio-API (läuft in Node), MIT-Lizenz, liefert Tempo **und** Beat-Zeitpunkte (Beat-Tracking nach Dixons BeatRoot), was für Schnitte im Takt nötig ist. Andere JS-Bibliotheken (z. B. web-audio-beat-detector, realtime-bpm-analyzer) setzen die Web-Audio-API des Browsers voraus oder liefern nur BPM. Parameter (22,05 kHz, Hop 221, FFT 1024) auf synthetischen Tracks 75–160 BPM gewählt; Tempo > 160 BPM wird halbiert (energiereichere Beat-Phase bleibt). Analyse im Worker-Thread, eine gleichzeitig, Beats für die ersten 300 s.
+- **Beat-Erkennung: music-tempo** — reines JavaScript ohne native Abhängigkeiten oder Web-Audio-API (läuft in Node), MIT-Lizenz, liefert Tempo **und** Beat-Zeitpunkte (Beat-Tracking nach Dixons BeatRoot), was für Schnitte im Takt nötig ist. Andere JS-Bibliotheken (z. B. web-audio-beat-detector, realtime-bpm-analyzer) setzen die Web-Audio-API des Browsers voraus oder liefern nur BPM. Parameter (22,05 kHz, Hop 221, FFT 1024) auf synthetischen Tracks 75–160 BPM gewählt; Tempo > 160 BPM wird halbiert (energiereichere Beat-Phase bleibt). Analyse in einem kurzlebigen Kindprozess (seit 0.4.0; vorher Worker-Thread, dessen Speicher im Serverprozess blieb), eine gleichzeitig, Beats für die ersten 300 s.
 - Text über libass (ASS-Untertitel) statt `drawtext`: der `ffmpeg-static`-Build 7.0.2 enthält kein `drawtext` (benötigt libharfbuzz), aber `ass`. Abweichung von der Vorgabe „drawtext“.
 - Render in Teilstücken + concat (siehe oben) statt eines großen xfade-Graphen — wegen des gemessenen Speicherbedarfs.
 - Bibliothek: Pexels API (Fotos + Videos), Stimmung/Nische → Suchbegriffe; ohne Schlüssel oder bei Pexels-Fehlern die statische Liste des Frontends.
@@ -237,18 +251,25 @@ Renderzeiten und Speicher auf Render: **UNKNOWN** (abhängig vom Instanztyp).
 - Text wird auf Render nur mit den mitgelieferten Schriften über fontconfig/libass gerendert; ob fontconfig auf Render ohne Systemschriften sauber läuft: **UNKNOWN** (lokal geprüft).
 - Abmelden macht den JWT nicht ungültig (zustandslos, 30 Tage gültig). „Passwort vergessen“ versendet nichts. Keine E-Mail-Bestätigung, kein Rate-Limiting.
 - Checkout/Portal liefern 501; das Frontend zeigt dann eine allgemeine Fehlermeldung.
-- Pexels-Namensnennung (Fotograf) wird im Feld `credit` mitgeliefert, im Frontend aber nicht angezeigt; ob das den Pexels-Richtlinien genügt: **UNKNOWN**.
+- Pexels-Namensnennung: Fotograf und „Pexels“ klein auf der Vorschau in der Bibliothek, nicht im fertigen Video; ob das den Pexels-Richtlinien genügt: **UNKNOWN**.
 - Upload-Dateien sind ohne Anmeldung abrufbar, wenn man die URL kennt (UUID-Pfad).
 - Lizenzen der statischen Bibliotheksinhalte für den Produktiveinsatz: **UNKNOWN**. Preise in `src/config/pricing.ts` sind Platzhalter.
 - Maximale Videolänge 300 s; Timeout 20 min pro FFmpeg-Schritt.
+- Parallaxe: zwei Ebenen (Vorder-/Hintergrund), keine echte 3D-Rekonstruktion; hinter dem Vordergrund bleibt ein weicher Schatten der Figur sichtbar, an Kanten eine leichte Unschärfe. Qualität hängt von der Tiefenkarte ab (z. B. Gegenlicht, Spiegelungen).
+- Tiefe braucht das Browser-Modell: erster Download 27,3 MB + 5,6 (komprimiert; 26,9 entpackt) MB, Rechenzeit pro Foto auf schwachen Handys: **UNKNOWN** (gemessen nur im Desktop-Headless-Chrome). Bilder ohne CORS-Freigabe können nicht gelesen werden → Ken Burns.
+- Tiefenkarten liegen wie alle Uploads in DATA_DIR und gehen beim Redeploy verloren. Beim nächsten Öffnen des Editors (Parallaxe an) prüft das Frontend die Karten und berechnet fehlende neu; ein Render dazwischen nutzt Ken Burns.
+- Render-Zeit und Speicher auf Render (0,5 CPU, 512 MB): **UNKNOWN**; lokal gemessene Werte siehe Tabelle.
+- Der Build kopiert die ONNX-Runtime-WASM-Datei (26,9 MB) nach `dist/assets`; zur Laufzeit lädt transformers.js sie aber vom CDN jsDelivr (im Browser-Test gemessen). Die Kopie wird also mit deployt, aber nicht verwendet.
+- `@huggingface/transformers` bringt `onnxruntime-node` (548 MB) als feste Abhängigkeit mit, die im Browser nie genutzt wird: `npm ci` im Wurzelverzeichnis dauerte lokal 58 s, `node_modules` 903 MB. Variante zur Entscheidung (Eigentümer): transformers.js zur Laufzeit vom CDN jsDelivr laden (die WASM-Datei kommt ohnehin von dort) — spart Installation und die ungenutzte Kopie in `dist/`, muss aber erneut im Browser getestet werden.
 
 ### Nächste Schritte
 
 1. Auf Render: prüfen, ob `PEXELS_API_KEY` gesetzt ist, und die Pexels-Suche (DE/RU) mit echtem Schlüssel testen; Render-Zeiten und Speicher dort messen.
 2. Etappe 3: Videos und Uploads in Cloudflare R2 (R2-Treiber für `server/src/storage`), Links, Verlauf; Datenbank statt JSON-Dateien (Wahl **UNKNOWN**).
 3. Etappe 4: Polar (Credits/Abo, Webhooks), Checkout und Portal statt 501.
-4. Etappe 5: Integration mit Website-SDK (webstudio-sdk-muenchen.com) über API.
-5. Offen: Schriftauswahl im Frontend auf die 4 Render-Schriften begrenzen oder weitere TTF ergänzen (Entscheidung Eigentümer); Bibliotheks-`bpm`/`duration` durch Messwerte ersetzen (Entscheidung Eigentümer).
+4. Parallaxe und Effekte auf Render messen (0,5 CPU, 512 MB).
+5. Etappe 5: Integration mit Website-SDK (webstudio-sdk-muenchen.com) über API.
+6. Offen: Schriftauswahl im Frontend auf die 4 Render-Schriften begrenzen oder weitere TTF ergänzen (Entscheidung Eigentümer); Bibliotheks-`bpm`/`duration` durch Messwerte ersetzen (Entscheidung Eigentümer).
 
 ---
 
@@ -349,6 +370,7 @@ server/
 | `GET/POST /api/projects`, `GET/PATCH/DELETE /api/projects/:id` | CRUD bound to the user (other users' projects → 404) |
 | `POST /api/upload/audio` | MP3/WAV/M4A, ≤ 20 MB, field `rightsConfirmed=true` required (else 400 `rights_not_confirmed`), checked with ffprobe |
 | `POST /api/upload/media` | JPG/PNG/WEBP, MP4/MOV/WEBM/M4V, ≤ 200 MB, checked with ffprobe |
+| `POST /api/upload/depth` | depth map (PNG, ≤ 8 MB, ≤ 2048 px) for parallax; only the user's own maps are used when rendering |
 | `POST /api/audio/analyze` | `{ duration, bpm, beats[], peaks[] }` for an own upload or a library track; result cached |
 | `GET /api/library/audio?mood=&niche=` | static track list |
 | `GET /api/library/media?q=&kind=&orientation=&page=&lang=&mood=&niche=` | Pexels search (photos + videos, with `credit` = author) or static list; one page per call, empty list = no more pages; header `X-Library-Source` |
@@ -392,6 +414,14 @@ Error format: `{ error: <code>, message }` — the frontend client reads `error`
 - Over 300 s: notice in the editor with "Cut to 5:00" (`lengthMode = 300`); otherwise the backend answers 400 `too_long`.
 - Cost = `renderCost(plannedDuration(project))` — the same function in the frontend (display) and the backend (billing).
 
+### 2.5D parallax and beat effects (since 0.4.0)
+
+**Depth maps in the browser.** Switch "Depth (2.5D)" at the top of the Visual block. When switched on, the browser loads transformers.js once (own chunk) and the open model **Depth Anything V2 Small** (`onnx-community/depth-anything-v2-small`, ONNX, 8-bit quantized, file `model_quantized.onnx` 27.3 MB, licence **Apache-2.0** according to the model card) from Hugging Face plus ONNX Runtime Web (WASM) from the jsDelivr CDN; both end up in the browser cache. Each photo is scaled to at most 1280 px (long side), depth is computed (bright = near), a foreground threshold is chosen with Otsu's method (kept between the 40th and 85th percentile) and the map is sent as a greyscale PNG to `POST /api/upload/depth`; the media item gets `depth: { id, url, threshold }`. Progress "Preparing depth: 3 of 15", badge on finished photos. Videos are skipped.
+
+**Parallax in the render** (`parallaxSource` in `server/src/render/pipeline.js`). Chosen method: **two layers with a soft depth mask** instead of `displace`. `displace` would need a time-dependent displacement map per frame (`geq` per pixel and frame) — far too slow on 0.5 CPU. Instead, **once per photo** two layers are prepared as PNG (`prepareParallaxLayers`, ≈ 0.5 s, ≈ 150 MB): the slightly enlarged foreground with a soft alpha mask from the depth map (threshold + blur), and the background in which the foreground area is filled from its surroundings (normalised convolution: blur(image × background weight) ÷ blur(background weight)) — so the edge uncovered by the movement shows background colours instead of a double image. Per piece both layers are decoded once and repeated with `loop`; per frame only a crop of the background (small drift) and an overlay of the foreground (≈ 3× larger drift) run — no per-frame scaling. The direction changes per shot. Duration, transitions and beat-synced cuts are unchanged (same piece logic). Without a depth map (model not loaded, old browser, foreign or lost file) → Ken Burns without errors; video clips → never parallax.
+
+**Beat effects** (`beatFxChain`, presets in `server/src/shared/effects.js`, shared with the frontend). Presets None / Soft / Medium / Energetic, default by mood (calm → Soft, energetic → Energetic, premium → Soft, corporate → None). Effects on the analysed beats: zoom punch and shake (`zoompan`), flash (`eq`), colour pulse (`hue`), short RGB glitch (`rgbashift` enabled only around the beat). Soft = light punch + colour pulse on every 2nd beat; Medium = punch on every beat, slight shake, flash on every 2nd beat; Energetic = stronger, plus glitch on every 4th beat. Each piece only contains the beats that touch it (short expressions). No track or beats → no effects. The effects are in the MP4; text and watermark stay still (burned in afterwards). Picker next to the video length (Montage and Output panels) and in the Style panel; short label in the Style block.
+
 ### Environment variables (backend, `server/.env.example`)
 
 | Variable | Meaning |
@@ -433,8 +463,9 @@ VITE_API_URL=http://localhost:8080 npm run dev
 
 ### Current state
 
+- 0.4.0 (2026-09-27): 2.5D parallax (depth model in the browser) and beat effects. Verified locally: `npx tsc --noEmit`, `npm run build`; `npm run smoke` (165/165; new: depth map upload, render with depth maps, all presets, fallback without depth map, foreign depth map, measurements 30 s / 3 min); headless Chrome with the **real model** in the browser (11/11): 3 photos → depth 3 of 3, preset "Energetic", 1:50 track → MP4 = track, no JS errors. Frames from the MP4: `docs/screenshots/0.4.0/`. Not verified on Render: **UNKNOWN**.
 - 0.3.0 (2026-09-27): editor rework after the owner's first test in production. Verified locally: `npx tsc --noEmit`, `npm run build`; `npm run smoke` (99/99); headless Chrome against the local backend with a Pexels stand-in (`server/scripts/fake-pexels.mjs`): 21/21 — incl. music video with a 1:50 track → MP4 of 110.03 s = track, 3 specifically picked photos end up exactly in the project (even when an older, slower search answers afterwards), search "singer stage" returns results, loading more on scroll, the player opens by itself after rendering, panel 475 px (33 % of 1440) and resizable, mobile bottom sheet 85 %, no JS errors. Screenshots: `docs/screenshots/0.3.0/` (library shown with the Pexels stand-in, hence "Fixture Photographer"). Not verified against the real Pexels API (no key available): **UNKNOWN**.
-- Stage 0 ✔, stage 1 ✔, stage 2 (backend MVP) ✔ locally; not deployed to Render yet.
+- Stage 0 ✔, stage 1 ✔, stage 2 (backend MVP) ✔; both services run on Render (frontend and API).
 - Verified (locally, 2026-09-26):
   - `npx tsc --noEmit` and `npm run build` (frontend) without errors.
   - `npm run smoke`: 80/80 checks passed — incl. register/login, audio upload with and without `rightsConfirmed`, analysis (synthetic 120 BPM track → 120 BPM), photo and video upload, project CRUD bound to the user, renders in 9:16, 16:9, 1:1 with fade/slide/cut/zoom (resolution, H.264 + AAC, duration = timeline ± 0.1 s, watermark), link signature and refresh, 402 on insufficient credits, billing 501, library, assistant.
@@ -446,7 +477,11 @@ VITE_API_URL=http://localhost:8080 npm run dev
 |---|---|
 | 30 s video, 9:16, 10 photos, Ken Burns, fade, audio, text, watermark | 33 416 ms render time, peak RSS server + FFmpeg 367 MB |
 | 30 s video, 9:16, 60 clips of 0.5 s, fade | 58 954 ms, peak 332 MB |
-| Beat analysis of a SoundHelix track (6:12 min) | ≈ 2.6 s; peak process RSS ≈ 360–400 MB |
+| Beat analysis of a SoundHelix track (6:12 min) | ≈ 2.4 s; child process up to ≈ 330 MB, released afterwards; server process stays at ≈ 58 MB (since 0.4.0) |
+| 30 s video, 9:16, 10 photos, **parallax + "Energetic"**, cut on the beat (0.4.0) | 18 661 ms, peak RSS server + FFmpeg 279 MB |
+| 3 min video, 9:16, 10 photos, **parallax + "Energetic"**, cut on the beat (0.4.0) | 98 762 ms, peak 286 MB |
+| Depth map in the browser (headless Chrome, WASM, 1 photo ≤ 1280 px) | ≈ 9,800–10,800 ms per photo (after the model is loaded) |
+| Download when "Depth" is first switched on | model 27.3 MB + ONNX Runtime (WASM) 5.6 (compressed; 26.9 unpacked) MB + transformers.js 169 kB (gzip); afterwards from the browser cache |
 | Earlier pipeline variant (all clips in one xfade graph) | 30 s / 10 clips: 1119 MB; 60 clips: ≈ 3.9 GB (FFmpeg alone) — therefore dropped |
 
 Render times and memory on Render: **UNKNOWN** (depend on the instance type).
@@ -454,7 +489,7 @@ Render times and memory on Render: **UNKNOWN** (depend on the instance type).
 ### Decisions made
 
 - FFmpeg natively via `ffmpeg-static` + `ffprobe-static`, no Docker (owner).
-- **Beat detection: music-tempo** — pure JavaScript without native dependencies or the Web Audio API (runs in Node), MIT licence, returns the tempo **and** beat timestamps (beat tracking after Dixon's BeatRoot), which beat-synced cuts need. Other JS libraries (e.g. web-audio-beat-detector, realtime-bpm-analyzer) require the browser's Web Audio API or return BPM only. Parameters (22.05 kHz, hop 221, FFT 1024) chosen on synthetic 75–160 BPM tracks; tempos > 160 BPM are halved (the beat phase with more energy is kept). Analysis in a worker thread, one at a time, beats for the first 300 s.
+- **Beat detection: music-tempo** — pure JavaScript without native dependencies or the Web Audio API (runs in Node), MIT licence, returns the tempo **and** beat timestamps (beat tracking after Dixon's BeatRoot), which beat-synced cuts need. Other JS libraries (e.g. web-audio-beat-detector, realtime-bpm-analyzer) require the browser's Web Audio API or return BPM only. Parameters (22.05 kHz, hop 221, FFT 1024) chosen on synthetic 75–160 BPM tracks; tempos > 160 BPM are halved (the beat phase with more energy is kept). Analysis in a short-lived child process (since 0.4.0; previously a worker thread whose memory stayed in the server process), one at a time, beats for the first 300 s.
 - Text via libass (ASS subtitles) instead of `drawtext`: the `ffmpeg-static` 7.0.2 build has no `drawtext` (it needs libharfbuzz) but has `ass`. Deviation from the "drawtext" requirement.
 - Rendering in pieces + concat (see above) instead of one large xfade graph — because of the measured memory use.
 - Library: Pexels API (photos + videos), mood/niche → search terms; without a key or on Pexels errors the frontend's static list.
@@ -485,18 +520,25 @@ Render times and memory on Render: **UNKNOWN** (depend on the instance type).
 - On Render, text is rendered only with the bundled fonts via fontconfig/libass; whether fontconfig works cleanly on Render without system fonts: **UNKNOWN** (verified locally).
 - Logout does not invalidate the JWT (stateless, valid for 30 days). "Forgot password" sends nothing. No email verification, no rate limiting.
 - Checkout/portal return 501; the frontend then shows a generic error message.
-- Pexels attribution (photographer) is delivered in the `credit` field but not shown in the frontend; whether that satisfies the Pexels guidelines: **UNKNOWN**.
+- Pexels attribution: photographer and "Pexels" in small print on the library preview, not in the finished video; whether that satisfies the Pexels guidelines: **UNKNOWN**.
 - Uploaded files can be fetched without login if the URL is known (UUID path).
 - Licences of the static library content for production use: **UNKNOWN**. Prices in `src/config/pricing.ts` are placeholders.
 - Maximum video length 300 s; 20 min timeout per FFmpeg step.
+- Parallax: two layers (foreground/background), no real 3D reconstruction; a soft shadow of the figure remains visible behind the foreground, with a slight blur at the edges. Quality depends on the depth map (e.g. backlight, reflections).
+- Depth needs the browser model: first download 27.3 MB + 5.6 (compressed; 26.9 unpacked) MB, computation time per photo on weak phones: **UNKNOWN** (measured only in desktop headless Chrome). Images without CORS permission cannot be read → Ken Burns.
+- Depth maps live in DATA_DIR like all uploads and are lost on redeploy. The next time the editor is opened (parallax on) the frontend checks the maps and recomputes missing ones; a render in between uses Ken Burns.
+- Render time and memory on Render (0.5 CPU, 512 MB): **UNKNOWN**; locally measured values see the table.
+- The build copies the ONNX Runtime WASM file (26.9 MB) to `dist/assets`; at runtime transformers.js loads it from the jsDelivr CDN instead (measured in the browser test). The copy is deployed but not used.
+- `@huggingface/transformers` pulls in `onnxruntime-node` (548 MB) as a hard dependency that the browser never uses: `npm ci` at the root took 58 s locally, `node_modules` is 903 MB. Option for the owner to decide: load transformers.js at runtime from the jsDelivr CDN (the WASM file comes from there anyway) — saves the install and the unused copy in `dist/`, but needs another browser test.
 
 ### Next steps
 
 1. On Render: check whether `PEXELS_API_KEY` is set and test the Pexels search (DE/RU) with a real key; measure render time and memory there.
 2. Stage 3: videos and uploads in Cloudflare R2 (R2 driver for `server/src/storage`), links, history; a database instead of JSON files (choice **UNKNOWN**).
 3. Stage 4: Polar (credits/subscription, webhooks), checkout and portal instead of 501.
-4. Stage 5: integration with Website-SDK (webstudio-sdk-muenchen.com) via API.
-5. Open: limit the frontend font choice to the 4 render fonts or add more TTFs (owner's decision); replace the library `bpm`/`duration` with measured values (owner's decision).
+4. Measure parallax and effects on Render (0.5 CPU, 512 MB).
+5. Stage 5: integration with Website-SDK (webstudio-sdk-muenchen.com) via API.
+6. Open: limit the frontend font choice to the 4 render fonts or add more TTFs (owner's decision); replace the library `bpm`/`duration` with measured values (owner's decision).
 
 ---
 
@@ -597,6 +639,7 @@ server/
 | `GET/POST /api/projects`, `GET/PATCH/DELETE /api/projects/:id` | CRUD с привязкой к пользователю (чужие проекты → 404) |
 | `POST /api/upload/audio` | MP3/WAV/M4A, ≤ 20 МБ, поле `rightsConfirmed=true` обязательно (иначе 400 `rights_not_confirmed`), проверка ffprobe |
 | `POST /api/upload/media` | JPG/PNG/WEBP, MP4/MOV/WEBM/M4V, ≤ 200 МБ, проверка ffprobe |
+| `POST /api/upload/depth` | карта глубины (PNG, ≤ 8 МБ, ≤ 2048 px) для параллакса; при рендере используются только свои карты |
 | `POST /api/audio/analyze` | `{ duration, bpm, beats[], peaks[] }` для своей загрузки или трека библиотеки; результат кэшируется |
 | `GET /api/library/audio?mood=&niche=` | статический список треков |
 | `GET /api/library/media?q=&kind=&orientation=&page=&lang=&mood=&niche=` | поиск Pexels (фото + видео, с `credit` = автор) или статический список; одна страница за вызов, пустой список = страниц больше нет; заголовок `X-Library-Source` |
@@ -640,6 +683,14 @@ server/
 - Больше 300 с: предупреждение в редакторе с кнопкой «Обрезать до 5:00» (`lengthMode = 300`); иначе бэкенд отвечает 400 `too_long`.
 - Стоимость = `renderCost(plannedDuration(project))` — одна и та же функция во фронтенде (показ) и бэкенде (списание).
 
+### 2.5D-параллакс и эффекты под бит (с 0.4.0)
+
+**Карты глубины в браузере.** Переключатель «Объём (2.5D)» наверху блока «Визуал». При включении браузер один раз загружает transformers.js (отдельный чанк) и открытую модель **Depth Anything V2 Small** (`onnx-community/depth-anything-v2-small`, ONNX, 8-битная квантизация, файл `model_quantized.onnx` 27,3 МБ, лицензия **Apache-2.0** по карточке модели) с Hugging Face, а также ONNX Runtime Web (WASM) с CDN jsDelivr; всё кэшируется браузером. Каждое фото уменьшается до 1280 px по длинной стороне, считается глубина (светлое = близко), порог переднего плана выбирается методом Оцу (в пределах 40–85-го перцентиля), карта отправляется PNG в оттенках серого на `POST /api/upload/depth`; медиа-элемент получает `depth: { id, url, threshold }`. Прогресс «Готовим объём: 3 из 15», значок на готовых фото. Видео пропускаются.
+
+**Параллакс при рендере** (`parallaxSource` в `server/src/render/pipeline.js`). Выбран метод **двух слоёв с мягкой маской глубины**, а не `displace`. `displace` требует на каждый кадр свою карту смещения (`geq` на каждый пиксель каждого кадра) — на 0,5 CPU слишком медленно. Вместо этого **один раз на фото** готовятся два слоя в PNG (`prepareParallaxLayers`, ≈ 0,5 с, ≈ 150 МБ): слегка увеличенный передний план с мягкой альфа-маской из карты глубины (порог + размытие) и фон, в котором область переднего плана заполнена из окружения (нормализованная свёртка: размытие(изображение × вес фона) ÷ размытие(вес фона)), — поэтому открывающийся при сдвиге край показывает цвета фона, а не двойное изображение. В каждой части оба слоя декодируются один раз и повторяются через `loop`; на каждом кадре — только обрезка фона (малый дрейф) и наложение переднего плана (дрейф ≈ в 3 раза больше), без масштабирования на каждом кадре. Направление меняется от кадра к кадру. Длительность, переходы и склейки под бит не меняются (та же логика частей). Нет карты глубины (модель не загрузилась, старый браузер, чужой или потерянный файл) → Ken Burns без ошибок; видео-клипы → параллакс никогда.
+
+**Эффекты под бит** (`beatFxChain`, пресеты в `server/src/shared/effects.js`, общие с фронтендом). Пресеты Нет / Мягко / Средне / Энергично, по умолчанию по настроению (спокойное → Мягко, энергичное → Энергично, премиум → Мягко, корпоративное → Нет). Эффекты на битах из анализа: «удар» приближения и тряска (`zoompan`), вспышка (`eq`), цветовая пульсация (`hue`), короткий RGB-глитч (`rgbashift` включается только около бита). Мягко — лёгкий удар и пульсация на каждой 2-й доле; Средне — удар на каждой доле, лёгкая тряска, вспышка на каждой 2-й; Энергично — сильнее и глитч на каждой 4-й доле. В каждую часть попадают только касающиеся её биты (короткие выражения). Нет трека или битов → нет эффектов. Эффекты вшиты в MP4; текст и водяной знак не дрожат (накладываются после). Выбор — рядом с длиной ролика (панели «Монтаж» и «Готовый ролик») и в панели «Стиль»; кратко — в сводке блока «Стиль».
+
 ### Переменные окружения (бэкенд, `server/.env.example`)
 
 | Переменная | Значение |
@@ -681,8 +732,9 @@ VITE_API_URL=http://localhost:8080 npm run dev
 
 ### Текущее состояние
 
+- 0.4.0 (2026-09-27): 2.5D-параллакс (модель глубины в браузере) и эффекты под бит. Проверено локально: `npx tsc --noEmit`, `npm run build`; `npm run smoke` (165/165; новое: загрузка карты глубины, рендер с картами глубины, все пресеты, фолбэк без карты, чужая карта, замеры 30 с / 3 мин); headless Chrome с **настоящей моделью** в браузере (11/11): 3 фото → объём 3 из 3, пресет «Энергично», трек 1:50 → MP4 = треку, нет JS-ошибок. Кадры из MP4: `docs/screenshots/0.4.0/`. На Render не проверено: **UNKNOWN**.
 - 0.3.0 (2026-09-27): переработка редактора по итогам первого теста владельца на проде. Проверено локально: `npx tsc --noEmit`, `npm run build`; `npm run smoke` (99/99); headless Chrome против локального бэкенда с имитацией Pexels (`server/scripts/fake-pexels.mjs`): 21/21 — в том числе клип с треком 1:50 → MP4 110,03 с = трек, 3 конкретно выбранных фото попадают в проект именно они (даже если после них отвечает более старый медленный поиск), поиск «singer stage» возвращает результаты, подгрузка при прокрутке, плеер открывается сам после рендера, панель 475 px (33 % от 1440) и тянется, на мобильном шторка 85 %, нет JS-ошибок. Скриншоты: `docs/screenshots/0.3.0/` (медиатека снята с имитацией Pexels, поэтому «Fixture Photographer»). Против настоящего Pexels API не проверено (ключа нет): **UNKNOWN**.
-- Этап 0 ✔, этап 1 ✔, этап 2 (бэкенд MVP) ✔ локально; на Render ещё не задеплоен.
+- Этап 0 ✔, этап 1 ✔, этап 2 (бэкенд MVP) ✔; оба сервиса работают на Render (фронтенд и API).
 - Проверено (локально, 2026-09-26):
   - `npx tsc --noEmit` и `npm run build` (фронтенд) без ошибок.
   - `npm run smoke`: пройдено 80/80 проверок — в том числе регистрация/вход, загрузка аудио с `rightsConfirmed` и без него, анализ (синтетический трек 120 BPM → 120 BPM), загрузка фото и видео, CRUD проектов с привязкой к пользователю, рендеры 9:16, 16:9, 1:1 с fade/slide/cut/zoom (разрешение, H.264 + AAC, длительность = таймлайн ± 0,1 с, водяной знак), подпись и обновление ссылки, 402 при нехватке кредитов, billing 501, библиотека, помощник.
@@ -694,7 +746,11 @@ VITE_API_URL=http://localhost:8080 npm run dev
 |---|---|
 | Ролик 30 с, 9:16, 10 фото, Ken Burns, fade, аудио, текст, водяной знак | 33 416 мс рендера, пик RSS сервер + FFmpeg 367 МБ |
 | Ролик 30 с, 9:16, 60 клипов по 0,5 с, fade | 58 954 мс, пик 332 МБ |
-| Анализ битов трека SoundHelix (6:12 мин) | ≈ 2,6 с; пик RSS процесса ≈ 360–400 МБ |
+| Анализ битов трека SoundHelix (6:12 мин) | ≈ 2,4 с; дочерний процесс до ≈ 330 МБ, затем освобождается; процесс сервера остаётся ≈ 58 МБ (с 0.4.0) |
+| Ролик 30 с, 9:16, 10 фото, **параллакс + «Энергично»**, склейка под бит (0.4.0) | 18 661 мс, пик RSS сервер + FFmpeg 279 МБ |
+| Ролик 3 мин, 9:16, 10 фото, **параллакс + «Энергично»**, склейка под бит (0.4.0) | 98 762 мс, пик 286 МБ |
+| Карта глубины в браузере (headless Chrome, WASM, 1 фото ≤ 1280 px) | ≈ 9 800–10 800 мс на фото (после загрузки модели) |
+| Загрузка при первом включении «Объёма» | модель 27,3 МБ + ONNX Runtime (WASM) 5,6 (в сжатом виде; 26,9 распакованная) МБ + transformers.js 169 кБ (gzip); дальше из кэша браузера |
 | Прежний вариант конвейера (все клипы в одном графе xfade) | 30 с / 10 клипов: 1119 МБ; 60 клипов: ≈ 3,9 ГБ (только FFmpeg) — поэтому отказались |
 
 Время рендера и память на Render: **UNKNOWN** (зависят от типа инстанса).
@@ -702,7 +758,7 @@ VITE_API_URL=http://localhost:8080 npm run dev
 ### Принятые решения
 
 - FFmpeg нативно через `ffmpeg-static` + `ffprobe-static`, без Docker (владелец).
-- **Определение бита: music-tempo** — чистый JavaScript без нативных зависимостей и без Web Audio API (работает в Node), лицензия MIT, возвращает темп **и** время каждого бита (beat tracking по BeatRoot Диксона), что нужно для склеек под бит. Другие JS-библиотеки (например, web-audio-beat-detector, realtime-bpm-analyzer) требуют Web Audio API браузера или дают только BPM. Параметры (22,05 кГц, шаг 221, FFT 1024) подобраны на синтетических треках 75–160 BPM; темп > 160 BPM делится пополам (остаётся фаза битов с большей энергией). Анализ в worker-потоке, по одному, биты — за первые 300 с.
+- **Определение бита: music-tempo** — чистый JavaScript без нативных зависимостей и без Web Audio API (работает в Node), лицензия MIT, возвращает темп **и** время каждого бита (beat tracking по BeatRoot Диксона), что нужно для склеек под бит. Другие JS-библиотеки (например, web-audio-beat-detector, realtime-bpm-analyzer) требуют Web Audio API браузера или дают только BPM. Параметры (22,05 кГц, шаг 221, FFT 1024) подобраны на синтетических треках 75–160 BPM; темп > 160 BPM делится пополам (остаётся фаза битов с большей энергией). Анализ в короткоживущем дочернем процессе (с 0.4.0; раньше worker-поток, память которого оставалась в процессе сервера), по одному, биты — за первые 300 с.
 - Текст через libass (субтитры ASS) вместо `drawtext`: в сборке `ffmpeg-static` 7.0.2 нет `drawtext` (нужна libharfbuzz), но есть `ass`. Отступление от требования «drawtext».
 - Рендер частями + concat (см. выше) вместо одного большого графа xfade — из-за измеренного расхода памяти.
 - Библиотека: Pexels API (фото + видео), настроение/ниша → поисковые запросы; без ключа или при ошибке Pexels — статический список фронтенда.
@@ -733,15 +789,22 @@ VITE_API_URL=http://localhost:8080 npm run dev
 - На Render текст рисуется только поставляемыми шрифтами через fontconfig/libass; работает ли fontconfig на Render без системных шрифтов — **UNKNOWN** (проверено локально).
 - Выход не аннулирует JWT (без состояния, действует 30 дней). «Забыли пароль?» ничего не отправляет. Нет подтверждения email и ограничения частоты запросов.
 - Checkout/портал отвечают 501; фронтенд показывает общее сообщение об ошибке.
-- Атрибуция Pexels (фотограф) передаётся в поле `credit`, но во фронтенде не показывается; соответствует ли это правилам Pexels — **UNKNOWN**.
+- Атрибуция Pexels: фотограф и «Pexels» мелким текстом на превью в медиатеке, но не в готовом ролике; соответствует ли это правилам Pexels — **UNKNOWN**.
 - Загруженные файлы доступны без входа, если известен URL (путь с UUID).
 - Лицензии статического контента библиотеки для продакшена — **UNKNOWN**. Цены в `src/config/pricing.ts` — плейсхолдеры.
 - Максимальная длина ролика 300 с; таймаут 20 мин на шаг FFmpeg.
+- Параллакс: два слоя (передний план / фон), не настоящая 3D-реконструкция; за передним планом остаётся мягкая тень фигуры, на краях — лёгкое размытие. Качество зависит от карты глубины (например, контровой свет, отражения).
+- Объёму нужна модель в браузере: первая загрузка 27,3 МБ + 5,6 (в сжатом виде; 26,9 распакованная) МБ, время расчёта на фото на слабых телефонах — **UNKNOWN** (замерено только в десктопном headless Chrome). Изображения без разрешения CORS прочитать нельзя → Ken Burns.
+- Карты глубины хранятся в DATA_DIR, как все загрузки, и теряются при редеплое. При следующем открытии редактора (параллакс включён) фронтенд проверяет карты и пересчитывает недостающие; рендер в промежутке использует Ken Burns.
+- Время рендера и память на Render (0,5 CPU, 512 МБ) — **UNKNOWN**; локальные замеры — в таблице.
+- Сборка копирует файл ONNX Runtime WASM (26,9 МБ) в `dist/assets`, но во время работы transformers.js берёт его с CDN jsDelivr (замерено в браузерном тесте). Копия деплоится, но не используется.
+- `@huggingface/transformers` тянет `onnxruntime-node` (548 МБ) как обязательную зависимость, которая в браузере не используется: `npm ci` в корне локально занял 58 с, `node_modules` — 903 МБ. Вариант на решение владельца: загружать transformers.js во время работы с CDN jsDelivr (WASM и так берётся оттуда) — это убирает установку и неиспользуемую копию в `dist/`, но требует повторного браузерного теста.
 
 ### Следующие шаги
 
 1. На Render: проверить, задан ли `PEXELS_API_KEY`, и протестировать поиск Pexels (DE/RU) с настоящим ключом; измерить время рендера и память там.
 2. Этап 3: видео и загрузки в Cloudflare R2 (драйвер R2 для `server/src/storage`), ссылки, история; БД вместо JSON-файлов (выбор **UNKNOWN**).
 3. Этап 4: Polar (кредиты/подписка, вебхуки), checkout и портал вместо 501.
-4. Этап 5: интеграция с Website-SDK (webstudio-sdk-muenchen.com) через API.
-5. Открыто: ограничить выбор шрифтов во фронтенде четырьмя шрифтами рендера или добавить TTF (решение владельца); заменить `bpm`/`duration` библиотеки измеренными значениями (решение владельца).
+4. Замерить параллакс и эффекты на Render (0,5 CPU, 512 МБ).
+5. Этап 5: интеграция с Website-SDK (webstudio-sdk-muenchen.com) через API.
+6. Открыто: ограничить выбор шрифтов во фронтенде четырьмя шрифтами рендера или добавить TTF (решение владельца); заменить `bpm`/`duration` библиотеки измеренными значениями (решение владельца).

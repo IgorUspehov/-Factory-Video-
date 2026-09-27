@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
 import path from 'node:path';
 import { config, limits } from '../config.js';
@@ -21,6 +22,11 @@ export function createRenderQueue(db) {
   const resolver = (userId) => ({
     resolveMedia: async (item) => (await uploadPath(userId, item.id)) ?? fetchRemote(item.url),
     resolveAudio: async (audio) => (audio.id && (await uploadPath(userId, audio.id))) ?? fetchRemote(audio.url),
+    // depth maps only from the user's own uploads; anything else → no parallax for that photo (Ken Burns)
+    resolveDepth: async (depth) => {
+      const file = depth?.id ? await uploadPath(userId, depth.id) : null;
+      return file && existsSync(file) ? file : null;
+    },
   });
 
   async function process(job) {

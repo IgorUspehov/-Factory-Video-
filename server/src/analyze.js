@@ -1,17 +1,24 @@
-import { Worker } from 'node:worker_threads';
+import { execFile } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { limits } from './config.js';
 import { probe } from './media.js';
 
-// Beat tracking needs ~150–250 MB for a long track; a short-lived worker releases it right after,
-// and the chain keeps it to one analysis at a time.
+// Beat tracking needs ~150–250 MB for a long track. It runs in a short-lived child process, so that memory
+// goes back to the OS when it exits (a worker thread left it in the server process); one analysis at a time.
 let chain = Promise.resolve();
+
+const WORKER = fileURLToPath(new URL('./analyze-worker.js', import.meta.url));
 
 function inWorker(file) {
   return new Promise((resolve, reject) => {
-    const worker = new Worker(new URL('./analyze-worker.js', import.meta.url), { workerData: { file, beatSeconds: limits.maxVideoSeconds } });
-    worker.once('message', resolve);
-    worker.once('error', reject);
-    worker.once('exit', (code) => code !== 0 && reject(new Error(`analysis worker exited with ${code}`)));
+    execFile(process.execPath, [WORKER, file, String(limits.maxVideoSeconds)], { maxBuffer: 16 * 1024 * 1024, timeout: 120_000 }, (err, stdout) => {
+      if (err) return reject(new Error(`analysis failed: ${err.message}`));
+      try {
+        resolve(JSON.parse(stdout));
+      } catch (e) {
+        reject(e);
+      }
+    });
   });
 }
 

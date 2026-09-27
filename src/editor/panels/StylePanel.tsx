@@ -4,6 +4,7 @@ import { useI18n, type TKey } from '../../i18n';
 import { GOOGLE_FONTS } from '../../lib/project';
 import { moodKey, transitionKey } from '../../lib/labels';
 import { Advanced, Hint } from '../../components/Hint';
+import { BeatFxPicker } from '../BeatFxPicker';
 import type { StyleSettings, Transition } from '../../types';
 
 const TRANSITIONS: Transition[] = ['cut', 'fade', 'zoom', 'slide'];
@@ -73,6 +74,7 @@ export function StylePanel() {
       <Hint>{t('style.intro', { mood: t(moodKey[project.mood]) })}</Hint>
 
       <Toggle label={t('style.beatSync')} hint={t('style.beatSyncHint')} checked={s.beatSync} onChange={(v) => set({ beatSync: v })} />
+      <BeatFxPicker />
 
       <Advanced note={t('style.advancedNote')}>
         <div>

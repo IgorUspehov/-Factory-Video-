@@ -138,6 +138,8 @@ try {
   const audioFile = path.join(work, 'beat120.mp3');
   // 120 BPM: a decaying 55 Hz kick every 0.5 s plus a hat every 0.25 s
   await gen(['-f', 'lavfi', '-i', "aevalsrc='0.9*sin(2*PI*55*t)*exp(-25*mod(t\\,0.5))+0.15*sin(2*PI*3300*t)*exp(-60*mod(t\\,0.25))':s=44100:d=40", '-c:a', 'libmp3lame', '-b:a', '128k', audioFile]);
+  const longAudio = path.join(work, 'beat120-long.mp3');
+  await gen(['-f', 'lavfi', '-i', "aevalsrc='0.9*sin(2*PI*55*t)*exp(-25*mod(t\\,0.5))+0.15*sin(2*PI*3300*t)*exp(-60*mod(t\\,0.25))':s=44100:d=190", '-c:a', 'libmp3lame', '-b:a', '96k', longAudio]);
   const photos = [];
   for (let i = 0; i < 10; i++) {
     const f = path.join(work, `photo${i}.jpg`);
@@ -320,6 +322,86 @@ try {
   check('assistant ru', /[а-я]/i.test(asst.data.suggestion ?? ''), (asst.data.suggestion ?? '').slice(0, 60));
   check('DELETE project', (await api('DELETE', `/api/projects/${long.data.id}`, { token })).status === 200);
 
+  // ---------------------------------------------------------------- 0.4.0: depth maps, parallax, beat effects
+  const depthFile = path.join(work, 'depth.png');
+  // synthetic depth map: bright (near) ellipse in the centre, same aspect as the test photos (4:3)
+  await gen(['-f', 'lavfi', '-i', 'color=black:s=800x600,format=gray', '-vf', "geq=lum='255*max(0,1-hypot((X-W*0.5)/(W*0.3),(Y-H*0.5)/(H*0.42)))'", '-frames:v', '1', '-update', '1', depthFile]);
+  const regB = await api('POST', '/api/auth/register', { json: { email: 'fx@example.com', password: 'secret123' } });
+  const tokB = regB.data.token;
+  const dUp = await api('POST', '/api/upload/depth', { token: tokB, form: await fileForm(depthFile) });
+  check('upload depth map (PNG)', dUp.status === 201 && dUp.data.url, JSON.stringify(dUp.data));
+  check('upload depth map as JPG → 400', (await api('POST', '/api/upload/depth', { token: tokB, form: await fileForm(photos[0]) })).status === 400);
+  const auB = await api('POST', '/api/upload/audio', { token: tokB, form: await fileForm(audioFile, { rightsConfirmed: 'true' }) });
+  const anB = await api('POST', '/api/audio/analyze', { token: tokB, json: { id: auB.data.id } });
+  const mediaB = [];
+  for (const f of photos.slice(0, 3)) {
+    const up = await api('POST', '/api/upload/media', { token: tokB, form: await fileForm(f) });
+    mediaB.push({ id: up.data.id, kind: 'image', url: up.data.url, thumb: '', name: path.basename(f), source: 'upload' });
+  }
+  // photos 1 and 2 get the depth map, photo 3 has none → must fall back to Ken Burns within the same render
+  const withDepth = mediaB.map((m, i) => (i < 2 ? { ...m, depth: { id: dUp.data.id, url: dUp.data.url, threshold: 120 } } : m));
+  const fxBase = {
+    ...project,
+    title: 'FX',
+    lengthMode: 'timeline',
+    audio: { source: 'upload', id: auB.data.id, name: 'beat120.mp3', url: auB.data.url, duration: anB.data.duration, bpm: anB.data.bpm, beats: anB.data.beats, peaks: anB.data.peaks },
+    media: withDepth,
+    timeline: withDepth.map((m, i) => ({ id: `f${i}`, mediaId: m.id, duration: 3 })),
+  };
+  const fxCases = [
+    ['parallax + energetic', { parallax: true, beatFx: 'energetic' }],
+    ['parallax + medium', { parallax: true, beatFx: 'medium' }],
+    ['soft', { parallax: false, beatFx: 'soft' }],
+    ['none', { parallax: false, beatFx: 'none' }],
+  ];
+  for (const [label, fx] of fxCases) {
+    const pr = await api('POST', '/api/projects', { token: tokB, json: { ...fxBase, title: label, style: { ...style, transition: 'fade', beatSync: false, ...fx } } });
+    const r = await renderAndCheck(tokB, pr.data.id, '9:16', 9, `fx: ${label}`);
+    if (process.env.SMOKE_OUT && r.file) {
+      for (const t of ['1.2', '1.45', '4.2']) await run(FFMPEG, ['-v', 'error', '-y', '-ss', t, '-i', r.file, '-frames:v', '1', '-update', '1', path.join(process.env.SMOKE_OUT, `fx-${label.replace(/\W+/g, '_')}-${t}s.png`)]).catch(() => {});
+    }
+  }
+  // parallax on, but no depth maps at all (model not loaded) → plain Ken Burns, no error
+  const noDepth = await api('POST', '/api/projects', { token: tokB, json: { ...fxBase, title: 'no depth', media: mediaB, timeline: mediaB.map((m, i) => ({ id: `n${i}`, mediaId: m.id, duration: 3 })), style: { ...style, parallax: true, beatFx: 'energetic' } } });
+  await renderAndCheck(tokB, noDepth.data.id, '16:9', 9, 'fallback: parallax without depth maps');
+  // depth map id of another user is ignored (falls back), not an error
+  const foreign = await api('POST', '/api/projects', { token, json: { ...fxBase, title: 'foreign depth', audio: project.audio, media: withDepth.map((m, i) => ({ ...m, id: media[i].id, url: media[i].url })), timeline: withDepth.map((m, i) => ({ id: `g${i}`, mediaId: media[i].id, duration: 3 })), style: { ...style, parallax: true, beatFx: 'none' } } });
+  await renderAndCheck(token, foreign.data.id, '1:1', 9, 'foreign depth map ignored → Ken Burns');
+
+  // ---------------------------------------------------------------- 0.4.0 performance: parallax + energetic, 30 s and 3 min
+  const perfFx = [];
+  if (process.env.SMOKE_PERF !== '0') {
+    const regC = await api('POST', '/api/auth/register', { json: { email: 'perf@example.com', password: 'secret123' } });
+    const tokC = regC.data.token;
+    const dC = await api('POST', '/api/upload/depth', { token: tokC, form: await fileForm(depthFile) });
+    const auC = await api('POST', '/api/upload/audio', { token: tokC, form: await fileForm(longAudio, { rightsConfirmed: 'true' }) });
+    const anC = await api('POST', '/api/audio/analyze', { token: tokC, json: { id: auC.data.id } });
+    const mediaC = [];
+    for (const f of photos) {
+      const up = await api('POST', '/api/upload/media', { token: tokC, form: await fileForm(f) });
+      mediaC.push({ id: up.data.id, kind: 'image', url: up.data.url, thumb: '', name: path.basename(f), source: 'upload', depth: { id: dC.data.id, url: dC.data.url, threshold: 120 } });
+    }
+    for (const seconds of [30, 180]) {
+      const pr = await api('POST', '/api/projects', {
+        token: tokC,
+        json: {
+          ...project,
+          title: `perf ${seconds}s`,
+          lengthMode: seconds,
+          audio: { source: 'upload', id: auC.data.id, name: 'long.mp3', url: auC.data.url, duration: anC.data.duration, bpm: anC.data.bpm, beats: anC.data.beats, peaks: anC.data.peaks },
+          media: mediaC,
+          timeline: mediaC.map((m, i) => ({ id: `p${i}`, mediaId: m.id, duration: 3 })),
+          style: { ...style, transition: 'fade', beatSync: true, parallax: true, beatFx: 'energetic' },
+        },
+      });
+      peakMb = 0;
+      sampling = true;
+      const r = await renderAndCheck(tokC, pr.data.id, '9:16', seconds, `perf ${seconds}s parallax + energetic`);
+      sampling = false;
+      perfFx.push({ seconds, ms: r.ms, mb: Math.round(peakMb) });
+    }
+  }
+
   // ---------------------------------------------------------------- real track
   if (process.env.SMOKE_REAL_TRACK !== '0') {
     const t0 = Date.now();
@@ -331,6 +413,7 @@ try {
   console.log(`30 s video (10 photos, Ken Burns, fade, audio, text, watermark) 9:16: ${perfRes.ms} ms wall time`);
   console.log(`peak RSS of server + ffmpeg during that render: ${Math.round(perfPeak)} MB`);
   console.log(`30 s video from 60 clips (0.5 s each, fade): ${manyRes.ms} ms wall time, peak RSS ${Math.round(manyPeak)} MB`);
+  for (const p of perfFx) console.log(`${p.seconds} s video, 9:16, 10 photos, parallax + energetic, beat sync: ${p.ms} ms wall time, peak RSS ${p.mb} MB`);
   console.log(`machine: ${os.cpus().length}× ${os.cpus()[0]?.model}, ${Math.round(os.totalmem() / 1e9)} GB RAM`);
 } catch (err) {
   check('smoke script', false, err.stack);

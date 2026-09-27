@@ -47,6 +47,15 @@ export interface MediaItem {
   duration?: number;
   source: 'upload' | 'library';
   credit?: MediaCredit;
+  /** depth map for 2.5D parallax (computed in the browser, uploaded to the server) */
+  depth?: DepthMap;
+}
+
+export interface DepthMap {
+  id: string;
+  url: string;
+  /** 0–255: depth values above count as foreground */
+  threshold: number;
 }
 
 export interface LyricLine {
@@ -66,7 +75,14 @@ export interface StyleSettings {
   beatSync: boolean;
   audioFadeIn: boolean;
   audioFadeOut: boolean;
+  /** 2.5D parallax for photos with a depth map */
+  parallax?: boolean;
+  /** beat-synced effects preset; missing → default by mood (server/src/shared/effects.js) */
+  beatFx?: BeatFx;
 }
+
+export type { BeatFx } from '../server/src/shared/effects.js';
+import type { BeatFx } from '../server/src/shared/effects.js';
 
 export interface TimelineClip {
   id: string;

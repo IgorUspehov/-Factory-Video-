@@ -3,6 +3,7 @@ import { useEditor } from '../EditorContext';
 import { useI18n } from '../../i18n';
 import { effectiveTimeline, formatClock, lengthModeOf, snapToBeats, trackDuration } from '../../lib/project';
 import { LengthPicker } from '../LengthPicker';
+import { BeatFxPicker } from '../BeatFxPicker';
 import { Advanced, Hint } from '../../components/Hint';
 import type { TimelineClip } from '../../types';
 
@@ -32,6 +33,7 @@ export function MontagePanel() {
     return (
       <div className="space-y-5">
         <LengthPicker />
+        <BeatFxPicker />
         <div className="rounded-2xl border border-dashed border-line p-6 text-center">
           <Film size={22} className="mx-auto text-accent-light" />
           <p className="mt-3 text-muted">{t('montage.empty')}</p>
@@ -49,6 +51,7 @@ export function MontagePanel() {
     <div className="space-y-5">
       <Hint>{t('montage.intro')}</Hint>
       <LengthPicker />
+      <BeatFxPicker />
 
       <button
         type="button"

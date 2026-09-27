@@ -10,6 +10,17 @@
 
 - —
 
+### [0.4.0] — 2026-09-27
+
+„Belebung“ der Bilder — nur mit freien Werkzeugen und offenen Modellen.
+
+- **2.5D-Parallaxe:** Tiefenkarten im Browser mit Depth Anything V2 Small (`onnx-community/depth-anything-v2-small`, ONNX q8, 27,3 MB, Apache-2.0) über transformers.js 4.3 (WASM, lazy geladen, Browser-Cache); Otsu-Schwelle, PNG ≤ 1280 px, neuer Endpunkt `POST /api/upload/depth`, Feld `depth` am Medien-Element. Render: zwei Ebenen pro Foto einmal vorbereitet (Vordergrund mit weicher Maske, Hintergrund aus der Umgebung aufgefüllt), pro Bild nur Zuschnitt + Overlay mit unterschiedlicher Drift. Ohne Tiefenkarte → Ken Burns; Videos ohne Parallaxe. Verlorene Tiefenkarten (Redeploy) werden beim Öffnen des Editors erkannt und neu berechnet.
+- **Effekte im Takt:** Voreinstellungen Keine / Sanft / Mittel / Energisch (Standard nach Stimmung), Zoom-Punch, Wackeln, Blitz, Farbpuls, RGB-Glitch auf den analysierten Beats, im MP4; gemeinsame Definition `server/src/shared/effects.js`.
+- UI: Schalter „Tiefe (2.5D)“ oben im Visual-Block mit Erklärung, Fortschritt „Tiefe wird berechnet: 3 von 15“, Abzeichen auf Fotos mit Tiefe; Effekt-Auswahl neben der Videolänge (Schnitt, Ausgabe) und im Stil-Panel, Kurzanzeige im Stil-Block.
+- Beat-Analyse läuft jetzt in einem Kindprozess (Serverprozess bleibt bei ≈ 58 MB statt ≈ 270 MB nach einer Analyse).
+- Export-Seite: falscher Hinweis „Dateien liegen in Cloudflare R2“ ersetzt (Link gültig bis Datum, Dateien vorübergehend auf dem Server).
+- Prüfung: Smoke-Test 165/165 (neu: Tiefenkarten-Upload, Render mit Tiefenkarten, alle Voreinstellungen, Fallbacks, 30 s / 3 min mit Parallaxe + „Energisch“: 18,7 s / 98,8 s, Spitze 279 / 286 MB); Headless Chrome mit echtem Modell 11/11; Bilder in `docs/screenshots/0.4.0/`.
+
 ### [0.3.0] — 2026-09-27
 
 Editor-Überarbeitung nach dem ersten Test des Eigentümers in Produktion.
@@ -59,6 +70,17 @@ Erste Version des Frontends.
 
 - —
 
+### [0.4.0] — 2026-09-27
+
+Bringing images to life — free tools and open models only.
+
+- **2.5D parallax:** depth maps in the browser with Depth Anything V2 Small (`onnx-community/depth-anything-v2-small`, ONNX q8, 27.3 MB, Apache-2.0) via transformers.js 4.3 (WASM, lazy-loaded, browser cache); Otsu threshold, PNG ≤ 1280 px, new endpoint `POST /api/upload/depth`, `depth` field on the media item. Render: two layers prepared once per photo (foreground with a soft mask, background filled from its surroundings), per frame only crop + overlay with different drift. No depth map → Ken Burns; videos never get parallax. Lost depth maps (redeploy) are detected when the editor opens and recomputed.
+- **Beat effects:** presets None / Soft / Medium / Energetic (default by mood), zoom punch, shake, flash, colour pulse, RGB glitch on the analysed beats, in the MP4; shared definition `server/src/shared/effects.js`.
+- UI: "Depth (2.5D)" switch at the top of the Visual block with an explanation, progress "Preparing depth: 3 of 15", badge on photos with depth; effects picker next to the video length (Montage, Output) and in the Style panel, short label in the Style block.
+- Beat analysis now runs in a child process (the server process stays at ≈ 58 MB instead of ≈ 270 MB after an analysis).
+- Export page: false note "files are stored in Cloudflare R2" replaced (link valid until date, files stored temporarily on the server).
+- Verification: smoke test 165/165 (new: depth map upload, render with depth maps, all presets, fallbacks, 30 s / 3 min with parallax + "Energetic": 18.7 s / 98.8 s, peak 279 / 286 MB); headless Chrome with the real model 11/11; frames in `docs/screenshots/0.4.0/`.
+
 ### [0.3.0] — 2026-09-27
 
 Editor rework after the owner's first test in production.
@@ -107,6 +129,17 @@ First version of the frontend.
 ### [Unreleased]
 
 - —
+
+### [0.4.0] — 2026-09-27
+
+«Оживление» картинок — только бесплатными инструментами и открытыми моделями.
+
+- **2.5D-параллакс:** карты глубины в браузере моделью Depth Anything V2 Small (`onnx-community/depth-anything-v2-small`, ONNX q8, 27,3 МБ, Apache-2.0) через transformers.js 4.3 (WASM, ленивая загрузка, кэш браузера); порог Оцу, PNG ≤ 1280 px, новый эндпоинт `POST /api/upload/depth`, поле `depth` у медиа-элемента. Рендер: два слоя готовятся один раз на фото (передний план с мягкой маской, фон, заполненный из окружения), на каждом кадре — только обрезка и наложение с разным дрейфом. Нет карты глубины → Ken Burns; видео без параллакса. Потерянные карты глубины (редеплой) обнаруживаются при открытии редактора и пересчитываются.
+- **Эффекты под бит:** пресеты Нет / Мягко / Средне / Энергично (по умолчанию по настроению), удар приближения, тряска, вспышка, цветовая пульсация, RGB-глитч на битах из анализа, вшиты в MP4; общее определение `server/src/shared/effects.js`.
+- Интерфейс: переключатель «Объём (2.5D)» наверху блока «Визуал» с пояснением, прогресс «Готовим объём: 3 из 15», значок на фото с глубиной; выбор эффектов рядом с длиной ролика («Монтаж», «Готовый ролик») и в панели «Стиль», кратко в сводке блока «Стиль».
+- Анализ битов теперь в дочернем процессе (процесс сервера остаётся ≈ 58 МБ вместо ≈ 270 МБ после анализа).
+- Страница экспорта: ложный текст «Файлы хранятся в Cloudflare R2» заменён (ссылка действует до даты, файлы временно хранятся на сервере).
+- Проверка: smoke-тест 165/165 (новое: загрузка карты глубины, рендер с картами глубины, все пресеты, фолбэки, 30 с / 3 мин с параллаксом + «Энергично»: 18,7 с / 98,8 с, пик 279 / 286 МБ); headless Chrome с настоящей моделью 11/11; кадры в `docs/screenshots/0.4.0/`.
 
 ### [0.3.0] — 2026-09-27
 

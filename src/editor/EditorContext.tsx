@@ -3,6 +3,16 @@ import { api } from '../lib/api';
 import { useRender, type RenderError } from '../lib/useRender';
 import type { Format, NodeKind, Project, RenderState } from '../types';
 
+export interface DepthState {
+  /** idle → model (downloading) → running → idle; error = model unavailable (Ken Burns is used instead) */
+  phase: 'idle' | 'model' | 'running' | 'error';
+  done: number;
+  total: number;
+  modelPercent: number;
+  /** photos whose image could not be read (e.g. no CORS) — they use Ken Burns */
+  failed: number;
+}
+
 export type SaveState = 'saved' | 'dirty' | 'saving' | 'error';
 
 interface EditorValue {
@@ -18,6 +28,9 @@ interface EditorValue {
   /** big player modal over the canvas */
   playerOpen: boolean;
   setPlayerOpen: (open: boolean) => void;
+  depth: DepthState;
+  /** after a model error: allow another attempt */
+  retryDepth: () => void;
 }
 
 const Ctx = createContext<EditorValue | null>(null);
@@ -104,6 +117,88 @@ export function EditorProvider({ initial, children }: { initial: Project; childr
     [flush, start],
   );
 
+  // ---- 2.5D depth maps: computed in the browser while parallax is on, one photo at a time
+  const [depth, setDepth] = useState<DepthState>({ phase: 'idle', done: 0, total: 0, modelPercent: 0, failed: 0 });
+  const depthBusy = useRef(false);
+  const [depthPass, setDepthPass] = useState(0);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  const depthFailed = useRef(new Set<string>());
+  const parallax = !!project.style.parallax;
+  const pendingIds = project.media
+    .filter((m) => m.kind === 'image' && !m.depth && !depthFailed.current.has(m.id))
+    .map((m) => m.id)
+    .join(',');
+
+  // depth maps can disappear on the server (DATA_DIR is not persistent until R2): check once per editor session
+  // and drop missing ones, so they are computed again
+  const depthChecked = useRef(false);
+  useEffect(() => {
+    if (!parallax || depthChecked.current) return;
+    depthChecked.current = true;
+    const withDepth = projectRef.current.media.filter((m) => m.depth?.url);
+    void Promise.all(
+      withDepth.map(async (m) => {
+        try {
+          const res = await fetch(m.depth!.url, { method: 'HEAD' });
+          return res.ok ? null : m.id;
+        } catch {
+          return null; // offline etc.: keep it, the server falls back to Ken Burns anyway
+        }
+      }),
+    ).then((ids) => {
+      const lost = new Set(ids.filter(Boolean) as string[]);
+      if (lost.size) update((p) => ({ media: p.media.map((m) => (lost.has(m.id) ? { ...m, depth: undefined } : m)) }));
+    });
+  }, [parallax, update]);
+
+  useEffect(() => {
+    if (!parallax || !pendingIds || depthBusy.current || depth.phase === 'error') return;
+    depthBusy.current = true;
+    const stopped = () => !mounted.current || !projectRef.current.style.parallax;
+    (async () => {
+      const { computeDepth, preloadDepthModel, ModelError } = await import('../lib/depth');
+      const queue = pendingIds.split(',');
+      setDepth((d) => ({ ...d, phase: 'model', done: 0, total: queue.length }));
+      try {
+        await preloadDepthModel((pct) => setDepth((d) => ({ ...d, modelPercent: pct })));
+        setDepth((d) => ({ ...d, phase: 'running' }));
+        for (const id of queue) {
+          if (stopped()) break;
+          const item = projectRef.current.media.find((m) => m.id === id);
+          if (item && !item.depth) {
+            try {
+              const r = await computeDepth(item.url);
+              const up = await api.uploadDepth(r.png);
+              update((p) => ({
+                media: p.media.map((m) => (m.id === id ? { ...m, depth: { id: up.id, url: up.url, threshold: r.threshold } } : m)),
+              }));
+            } catch (err) {
+              if (err instanceof ModelError) throw err;
+              depthFailed.current.add(id);
+              setDepth((d) => ({ ...d, failed: d.failed + 1 }));
+            }
+          }
+          setDepth((d) => ({ ...d, done: d.done + 1 }));
+        }
+        setDepth((d) => ({ ...d, phase: 'idle' }));
+      } catch (err) {
+        console.warn('[depth] model unavailable, Ken Burns is used instead', err);
+        setDepth((d) => ({ ...d, phase: 'error' }));
+      } finally {
+        depthBusy.current = false;
+        // photos added meanwhile: run another pass
+        if (mounted.current) setDepthPass((n) => n + 1);
+      }
+    })();
+    // no cleanup: a running pass must not be cancelled by its own progress (pendingIds changes per photo)
+  }, [parallax, pendingIds, update, depthPass, depth.phase]);
+
   const value = useMemo<EditorValue>(
     () => ({
       project,
@@ -117,8 +212,10 @@ export function EditorProvider({ initial, children }: { initial: Project; childr
       renderError: error,
       playerOpen,
       setPlayerOpen,
+      depth,
+      retryDepth: () => setDepth((d) => ({ ...d, phase: 'idle', done: 0, total: 0 })),
     }),
-    [project, update, flush, saveState, selected, startRender, starting, error, playerOpen],
+    [project, update, flush, saveState, selected, startRender, starting, error, playerOpen, depth],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
-import { ArrowLeft, ArrowRight, Film, GripVertical, Library, Trash2, Upload } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Film, GripVertical, Layers, Library, Trash2, Upload } from 'lucide-react';
+import { DepthToggle } from '../DepthToggle';
 import { useEditor } from '../EditorContext';
 import { useI18n } from '../../i18n';
 import { api } from '../../lib/api';
@@ -76,6 +77,7 @@ export function VisualPanel() {
   return (
     <div className="space-y-4">
       <Hint>{t('visual.intro')}</Hint>
+      <DepthToggle />
       <div
         onDragOver={(e) => {
           if (e.dataTransfer.types.includes('Files')) {
@@ -138,6 +140,11 @@ export function VisualPanel() {
                 )}
                 <span className="absolute left-1.5 top-1.5 rounded-md bg-black/70 px-1.5 text-[10px] font-bold tabular-nums">{i + 1}</span>
                 {m.kind === 'video' && <Film size={13} className="absolute right-1.5 top-1.5 text-white drop-shadow" />}
+                {m.depth && (
+                  <span className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-accent/90 shadow-glow-sm" title={t('depth.badge')} aria-label={t('depth.badge')}>
+                    <Layers size={13} />
+                  </span>
+                )}
                 <GripVertical size={14} className="absolute left-1/2 top-1.5 hidden -translate-x-1/2 text-white/70 group-hover:block" />
                 <div className="absolute inset-x-0 bottom-0 flex justify-between bg-gradient-to-t from-black/80 p-1">
                   <button className="rounded p-1 hover:bg-white/10" onClick={() => move(i, i - 1)} aria-label={t('common.moveLeft')}>

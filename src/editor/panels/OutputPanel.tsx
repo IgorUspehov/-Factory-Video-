@@ -11,6 +11,7 @@ import { renderCost } from '../../config/pricing';
 import { FORMATS, formatKey, statusKey } from '../../lib/labels';
 import { MAX_VIDEO_SECONDS, projectDuration } from '../../lib/project';
 import { LengthPicker } from '../LengthPicker';
+import { BeatFxPicker } from '../BeatFxPicker';
 import { Hint } from '../../components/Hint';
 import { RenderPlayer } from '../../components/RenderPlayer';
 import { WatermarkNotice } from '../../components/WatermarkNotice';
@@ -58,6 +59,7 @@ export function OutputPanel() {
       </div>
 
       <LengthPicker />
+      <BeatFxPicker />
 
       <div className="grid grid-cols-2 gap-2 text-center">
         <div className="rounded-xl border border-accent/50 p-3 shadow-glow-sm" title={t('output.costHint')}>

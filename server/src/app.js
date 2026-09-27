@@ -163,6 +163,15 @@ export function createApp({ db, queue }) {
     res.status(201).json(await storeUpload(req, kind, info));
   }));
 
+  // Depth map (PNG, from the browser model) for 2.5D parallax; referenced from the media item as `depth.id`.
+  app.post('/api/upload/depth', auth, withUpload(limits.depthBytes, async (req, res) => {
+    if (path.extname(req.file.originalname).toLowerCase() !== '.png') throw new HttpError(400, 'unsupported_type');
+    const info = await probe(req.file.path).catch(() => null);
+    const v = info?.video;
+    if (!v || v.codec !== 'png' || v.width > 2048 || v.height > 2048) throw new HttpError(400, 'invalid_file');
+    res.status(201).json(await storeUpload(req, 'depth', info));
+  }));
+
   // ---------------------------------------------------------------- audio analysis
   app.post('/api/audio/analyze', auth, wrap(async (req, res) => {
     const id = String(req.body?.id ?? '');

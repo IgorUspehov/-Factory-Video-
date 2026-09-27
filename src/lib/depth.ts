@@ -1,9 +1,37 @@
 /**
  * Depth maps for 2.5D parallax, computed in the user's browser with an open model:
  * Depth Anything V2 Small (Apache-2.0), ONNX, 8-bit quantized (~27 MB), via transformers.js (ONNX Runtime Web, WASM).
- * transformers.js is imported lazily (own chunk) only when parallax is switched on; the model files are
- * cached by the browser (Cache API), so they are downloaded once.
+ * transformers.js is NOT an npm dependency: its self-contained browser bundle is imported at runtime from
+ * jsDelivr (pinned version), only when parallax is switched on. ONNX Runtime's WASM also comes from jsDelivr,
+ * the model from Hugging Face; the browser caches all of it, so it is downloaded once.
  */
+
+/** Pinned version; this bundle has no bare imports, so the browser can load it directly. */
+export const TRANSFORMERS_URL = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.0/dist/transformers.min.js';
+
+/** The part of the transformers.js API used here. */
+interface RawImageLike {
+  data: Uint8Array | Uint8ClampedArray;
+  width: number;
+  height: number;
+  channels: number;
+}
+interface TransformersModule {
+  env: { allowLocalModels: boolean };
+  pipeline: (task: 'depth-estimation', model: string, options: Record<string, unknown>) => Promise<unknown>;
+  RawImage: { fromCanvas: (canvas: HTMLCanvasElement) => unknown };
+}
+
+let modulePromise: Promise<TransformersModule> | null = null;
+function loadTransformers(): Promise<TransformersModule> {
+  // a variable URL + @vite-ignore keeps Vite from bundling it
+  const url = TRANSFORMERS_URL;
+  modulePromise ??= (import(/* @vite-ignore */ url) as Promise<TransformersModule>).catch((err) => {
+    modulePromise = null;
+    throw err;
+  });
+  return modulePromise;
+}
 
 export const DEPTH_MODEL = 'onnx-community/depth-anything-v2-small';
 /** long side of the depth map = long side of the largest render format (720×1280) */
@@ -19,15 +47,14 @@ export interface DepthResult {
 
 export type ModelProgress = (percent: number) => void;
 
-// transformers.js types are only needed inside this module
-type DepthPipeline = (input: unknown) => Promise<{ depth: { data: Uint8Array | Uint8ClampedArray; width: number; height: number; channels: number } }>;
+type DepthPipeline = (input: unknown) => Promise<{ depth: RawImageLike }>;
 
 let pipelinePromise: Promise<DepthPipeline> | null = null;
 
 async function getPipeline(onProgress?: ModelProgress): Promise<DepthPipeline> {
   if (!pipelinePromise) {
     pipelinePromise = (async () => {
-      const { pipeline, env } = await import('@huggingface/transformers');
+      const { pipeline, env } = await loadTransformers();
       env.allowLocalModels = false;
       const loaded = new Map<string, { loaded: number; total: number }>();
       const pipe = await pipeline('depth-estimation', DEPTH_MODEL, {
@@ -131,7 +158,7 @@ export async function computeDepth(url: string, onModelProgress?: ModelProgress)
   canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
   canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height);
 
-  const { RawImage } = await import('@huggingface/transformers');
+  const { RawImage } = await loadTransformers();
   const { depth } = await pipe(RawImage.fromCanvas(canvas));
   const { data, width, height, channels } = depth;
   const threshold = foregroundThreshold(data, channels);

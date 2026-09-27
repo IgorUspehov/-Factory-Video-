@@ -10,6 +10,11 @@
 
 - —
 
+### [0.4.1] — 2026-09-27
+
+- transformers.js ist keine npm-Abhängigkeit mehr: `src/lib/depth.ts` lädt das eigenständige Browser-Bundle zur Laufzeit von jsDelivr (feste Version 4.3.0, `dist/transformers.min.js`, 166 kB Brotli), nur wenn „Tiefe (2.5D)“ eingeschaltet wird (Entscheidung des Eigentümers). Grund: das npm-Paket zog `onnxruntime-node` (548 MB) mit. Ergebnis: `npm ci` 58 s → 20 s, `node_modules` 903 MB → 143 MB, `dist/` ohne ungenutzte WASM-Kopie (776 kB).
+- Prüfung: `npx tsc --noEmit`, `npm run build`; Headless Chrome mit echtem Modell 11/11 (Tiefe 3 von 3, ≈ 10,6–10,9 s pro Foto, MP4 110,03 s = Track, keine JS-Fehler).
+
 ### [0.4.0] — 2026-09-27
 
 „Belebung“ der Bilder — nur mit freien Werkzeugen und offenen Modellen.
@@ -70,6 +75,11 @@ Erste Version des Frontends.
 
 - —
 
+### [0.4.1] — 2026-09-27
+
+- transformers.js is no longer an npm dependency: `src/lib/depth.ts` loads the self-contained browser bundle at runtime from jsDelivr (pinned version 4.3.0, `dist/transformers.min.js`, 166 kB brotli), only when "Depth (2.5D)" is switched on (owner's decision). Reason: the npm package pulled in `onnxruntime-node` (548 MB). Result: `npm ci` 58 s → 20 s, `node_modules` 903 MB → 143 MB, `dist/` without the unused WASM copy (776 kB).
+- Verification: `npx tsc --noEmit`, `npm run build`; headless Chrome with the real model 11/11 (depth 3 of 3, ≈ 10.6–10.9 s per photo, MP4 110.03 s = track, no JS errors).
+
 ### [0.4.0] — 2026-09-27
 
 Bringing images to life — free tools and open models only.
@@ -129,6 +139,11 @@ First version of the frontend.
 ### [Unreleased]
 
 - —
+
+### [0.4.1] — 2026-09-27
+
+- transformers.js больше не npm-зависимость: `src/lib/depth.ts` загружает самостоятельный браузерный бандл во время работы с jsDelivr (фиксированная версия 4.3.0, `dist/transformers.min.js`, 166 кБ в Brotli), только при включении «Объёма (2.5D)» (решение владельца). Причина: npm-пакет тянул `onnxruntime-node` (548 МБ). Итог: `npm ci` 58 с → 20 с, `node_modules` 903 МБ → 143 МБ, в `dist/` нет неиспользуемой копии WASM (776 кБ).
+- Проверка: `npx tsc --noEmit`, `npm run build`; headless Chrome с настоящей моделью 11/11 (объём 3 из 3, ≈ 10,6–10,9 с на фото, MP4 110,03 с = треку, без JS-ошибок).
 
 ### [0.4.0] — 2026-09-27
 

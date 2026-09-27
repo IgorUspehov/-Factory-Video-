@@ -2,7 +2,7 @@
 
 **DE** · [EN](#english) · [RU](#русский)
 
-Stand der Dokumentation / Documentation as of / Документация актуальна на: **2026-09-27**, Version 0.4.0.
+Stand der Dokumentation / Documentation as of / Документация актуальна на: **2026-09-27**, Version 0.4.1.
 
 ---
 
@@ -147,7 +147,7 @@ Fehlerformat: `{ error: <code>, message }` — der Frontend-Client liest `error`
 
 ### 2.5D-Parallaxe und Effekte im Takt (seit 0.4.0)
 
-**Tiefenkarten im Browser.** Schalter „Tiefe (2.5D)“ oben im Visual-Block. Beim Einschalten lädt der Browser einmalig transformers.js (eigener Chunk) und das offene Modell **Depth Anything V2 Small** (`onnx-community/depth-anything-v2-small`, ONNX, 8-Bit quantisiert, Datei `model_quantized.onnx` 27,3 MB, Lizenz **Apache-2.0** laut Modellkarte) von Hugging Face sowie ONNX Runtime Web (WASM) vom CDN jsDelivr; beides landet im Browser-Cache. Jedes Foto wird auf höchstens 1280 px (lange Seite) verkleinert, die Tiefe berechnet (hell = nah), eine Vordergrund-Schwelle nach Otsu bestimmt (zwischen 40. und 85. Perzentil) und die Karte als Graustufen-PNG an `POST /api/upload/depth` gesendet; das Medien-Element bekommt `depth: { id, url, threshold }`. Fortschritt „Tiefe wird berechnet: 3 von 15“, Abzeichen auf fertigen Fotos. Videos werden übersprungen.
+**Tiefenkarten im Browser.** Schalter „Tiefe (2.5D)“ oben im Visual-Block. Beim Einschalten lädt der Browser einmalig transformers.js (zur Laufzeit vom CDN jsDelivr, feste Version 4.3.0, `dist/transformers.min.js`; keine npm-Abhängigkeit) und das offene Modell **Depth Anything V2 Small** (`onnx-community/depth-anything-v2-small`, ONNX, 8-Bit quantisiert, Datei `model_quantized.onnx` 27,3 MB, Lizenz **Apache-2.0** laut Modellkarte) von Hugging Face sowie ONNX Runtime Web (WASM) vom CDN jsDelivr; beides landet im Browser-Cache. Jedes Foto wird auf höchstens 1280 px (lange Seite) verkleinert, die Tiefe berechnet (hell = nah), eine Vordergrund-Schwelle nach Otsu bestimmt (zwischen 40. und 85. Perzentil) und die Karte als Graustufen-PNG an `POST /api/upload/depth` gesendet; das Medien-Element bekommt `depth: { id, url, threshold }`. Fortschritt „Tiefe wird berechnet: 3 von 15“, Abzeichen auf fertigen Fotos. Videos werden übersprungen.
 
 **Parallaxe im Render** (`parallaxSource` in `server/src/render/pipeline.js`). Gewählte Methode: **zwei Ebenen mit weicher Tiefenmaske** statt `displace`. `displace` bräuchte pro Bild eine zeitabhängige Verschiebungskarte (`geq` pro Pixel und Bild) — auf 0,5 CPU viel zu langsam. Stattdessen werden **einmal pro Foto** zwei Ebenen als PNG vorbereitet (`prepareParallaxLayers`, ≈ 0,5 s, ≈ 150 MB): der leicht vergrößerte Vordergrund mit weicher Alpha-Maske aus der Tiefenkarte (Schwelle + Weichzeichnung) und der Hintergrund, in dem die Fläche des Vordergrunds aus der Umgebung aufgefüllt ist (normalisierte Faltung: Weichzeichnung(Bild × Hintergrundgewicht) ÷ Weichzeichnung(Hintergrundgewicht)) — so zeigt die beim Verschieben freigelegte Kante Hintergrundfarben statt eines Doppelbilds. Pro Teilstück werden beide Ebenen einmal dekodiert und mit `loop` wiederholt; pro Bild laufen nur ein Zuschnitt des Hintergrunds (kleine Drift) und ein Overlay des Vordergrunds (≈ 3× größere Drift) — keine Skalierung pro Bild. Richtung wechselt je Aufnahme. Dauer, Übergänge und Schnitte im Takt bleiben unverändert (dieselbe Teilstück-Logik). Ohne Tiefenkarte (Modell nicht geladen, altes Browser, fremde oder verlorene Datei) → Ken Burns ohne Fehler; Videoclips → nie Parallaxe.
 
@@ -212,7 +212,7 @@ VITE_API_URL=http://localhost:8080 npm run dev
 | 30-s-Video, 9:16, 10 Fotos, **Parallaxe + „Energisch“**, Schnitt im Takt (0.4.0) | 18 661 ms, Spitze RSS Server + FFmpeg 279 MB |
 | 3-min-Video, 9:16, 10 Fotos, **Parallaxe + „Energisch“**, Schnitt im Takt (0.4.0) | 98 762 ms, Spitze 286 MB |
 | Tiefenkarte im Browser (Headless Chrome, WASM, 1 Foto ≤ 1280 px) | ≈ 9 800–10 800 ms pro Foto (nach dem Laden des Modells) |
-| Download beim ersten Einschalten von „Tiefe“ | Modell 27,3 MB + ONNX-Runtime (WASM) 5,6 (komprimiert; 26,9 entpackt) MB + transformers.js 169 kB (gzip); danach aus dem Browser-Cache |
+| Download beim ersten Einschalten von „Tiefe“ | Modell 27,3 MB + ONNX-Runtime (WASM) 5,6 (komprimiert; 26,9 entpackt) MB + transformers.js 166 kB (Brotli, jsDelivr); danach aus dem Browser-Cache |
 | Vorherige Pipeline-Variante (alle Clips in einem xfade-Graphen) | 30 s / 10 Clips: 1119 MB; 60 Clips: ≈ 3,9 GB (FFmpeg allein) — deshalb verworfen |
 
 Renderzeiten und Speicher auf Render: **UNKNOWN** (abhängig vom Instanztyp).
@@ -238,6 +238,8 @@ Renderzeiten und Speicher auf Render: **UNKNOWN** (abhängig vom Instanztyp).
 - Vor jedem Render wird das Projekt gespeichert (ausstehende Änderungen und laufende Speicherung abgewartet), weil das Backend den gespeicherten Stand rendert.
 - Ursache des Fehlers „es werden andere Fotos hinzugefügt“ siehe CHANGELOG 0.3.0.
 
+- transformers.js wird zur Laufzeit von jsDelivr geladen statt als npm-Paket (Eigentümer, 2026-09-27): das Paket zog `onnxruntime-node` (548 MB) mit, das der Browser nie nutzt. Gemessen: `npm ci` im Wurzelverzeichnis 58 s / `node_modules` 903 MB → 20 s / 143 MB; `dist/` 776 kB ohne ungenutzte WASM-Kopie (vorher 26,9 MB).
+
 ### Einschränkungen
 
 - **DATA_DIR geht bei jedem Redeploy auf Render verloren** (kein persistenter Datenträger). Bis Etappe 3 (R2) akzeptiert: Nutzer, Projekte, Uploads und Renders verschwinden dann; ausgegebene JWT werden ungültig, falls `JWT_SECRET` neu generiert wird.
@@ -259,8 +261,7 @@ Renderzeiten und Speicher auf Render: **UNKNOWN** (abhängig vom Instanztyp).
 - Tiefe braucht das Browser-Modell: erster Download 27,3 MB + 5,6 (komprimiert; 26,9 entpackt) MB, Rechenzeit pro Foto auf schwachen Handys: **UNKNOWN** (gemessen nur im Desktop-Headless-Chrome). Bilder ohne CORS-Freigabe können nicht gelesen werden → Ken Burns.
 - Tiefenkarten liegen wie alle Uploads in DATA_DIR und gehen beim Redeploy verloren. Beim nächsten Öffnen des Editors (Parallaxe an) prüft das Frontend die Karten und berechnet fehlende neu; ein Render dazwischen nutzt Ken Burns.
 - Render-Zeit und Speicher auf Render (0,5 CPU, 512 MB): **UNKNOWN**; lokal gemessene Werte siehe Tabelle.
-- Der Build kopiert die ONNX-Runtime-WASM-Datei (26,9 MB) nach `dist/assets`; zur Laufzeit lädt transformers.js sie aber vom CDN jsDelivr (im Browser-Test gemessen). Die Kopie wird also mit deployt, aber nicht verwendet.
-- `@huggingface/transformers` bringt `onnxruntime-node` (548 MB) als feste Abhängigkeit mit, die im Browser nie genutzt wird: `npm ci` im Wurzelverzeichnis dauerte lokal 58 s, `node_modules` 903 MB. Variante zur Entscheidung (Eigentümer): transformers.js zur Laufzeit vom CDN jsDelivr laden (die WASM-Datei kommt ohnehin von dort) — spart Installation und die ungenutzte Kopie in `dist/`, muss aber erneut im Browser getestet werden.
+- Tiefe braucht im Browser Zugriff auf cdn.jsdelivr.net (transformers.js, ONNX-Runtime-WASM) und huggingface.co (Modell). Sind sie blockiert oder offline, erscheint der Hinweis im Visual-Block und die Fotos bekommen Ken Burns.
 
 ### Nächste Schritte
 
@@ -416,7 +417,7 @@ Error format: `{ error: <code>, message }` — the frontend client reads `error`
 
 ### 2.5D parallax and beat effects (since 0.4.0)
 
-**Depth maps in the browser.** Switch "Depth (2.5D)" at the top of the Visual block. When switched on, the browser loads transformers.js once (own chunk) and the open model **Depth Anything V2 Small** (`onnx-community/depth-anything-v2-small`, ONNX, 8-bit quantized, file `model_quantized.onnx` 27.3 MB, licence **Apache-2.0** according to the model card) from Hugging Face plus ONNX Runtime Web (WASM) from the jsDelivr CDN; both end up in the browser cache. Each photo is scaled to at most 1280 px (long side), depth is computed (bright = near), a foreground threshold is chosen with Otsu's method (kept between the 40th and 85th percentile) and the map is sent as a greyscale PNG to `POST /api/upload/depth`; the media item gets `depth: { id, url, threshold }`. Progress "Preparing depth: 3 of 15", badge on finished photos. Videos are skipped.
+**Depth maps in the browser.** Switch "Depth (2.5D)" at the top of the Visual block. When switched on, the browser loads transformers.js once (at runtime from the jsDelivr CDN, pinned version 4.3.0, `dist/transformers.min.js`; not an npm dependency) and the open model **Depth Anything V2 Small** (`onnx-community/depth-anything-v2-small`, ONNX, 8-bit quantized, file `model_quantized.onnx` 27.3 MB, licence **Apache-2.0** according to the model card) from Hugging Face plus ONNX Runtime Web (WASM) from the jsDelivr CDN; both end up in the browser cache. Each photo is scaled to at most 1280 px (long side), depth is computed (bright = near), a foreground threshold is chosen with Otsu's method (kept between the 40th and 85th percentile) and the map is sent as a greyscale PNG to `POST /api/upload/depth`; the media item gets `depth: { id, url, threshold }`. Progress "Preparing depth: 3 of 15", badge on finished photos. Videos are skipped.
 
 **Parallax in the render** (`parallaxSource` in `server/src/render/pipeline.js`). Chosen method: **two layers with a soft depth mask** instead of `displace`. `displace` would need a time-dependent displacement map per frame (`geq` per pixel and frame) — far too slow on 0.5 CPU. Instead, **once per photo** two layers are prepared as PNG (`prepareParallaxLayers`, ≈ 0.5 s, ≈ 150 MB): the slightly enlarged foreground with a soft alpha mask from the depth map (threshold + blur), and the background in which the foreground area is filled from its surroundings (normalised convolution: blur(image × background weight) ÷ blur(background weight)) — so the edge uncovered by the movement shows background colours instead of a double image. Per piece both layers are decoded once and repeated with `loop`; per frame only a crop of the background (small drift) and an overlay of the foreground (≈ 3× larger drift) run — no per-frame scaling. The direction changes per shot. Duration, transitions and beat-synced cuts are unchanged (same piece logic). Without a depth map (model not loaded, old browser, foreign or lost file) → Ken Burns without errors; video clips → never parallax.
 
@@ -481,7 +482,7 @@ VITE_API_URL=http://localhost:8080 npm run dev
 | 30 s video, 9:16, 10 photos, **parallax + "Energetic"**, cut on the beat (0.4.0) | 18 661 ms, peak RSS server + FFmpeg 279 MB |
 | 3 min video, 9:16, 10 photos, **parallax + "Energetic"**, cut on the beat (0.4.0) | 98 762 ms, peak 286 MB |
 | Depth map in the browser (headless Chrome, WASM, 1 photo ≤ 1280 px) | ≈ 9,800–10,800 ms per photo (after the model is loaded) |
-| Download when "Depth" is first switched on | model 27.3 MB + ONNX Runtime (WASM) 5.6 (compressed; 26.9 unpacked) MB + transformers.js 169 kB (gzip); afterwards from the browser cache |
+| Download when "Depth" is first switched on | model 27.3 MB + ONNX Runtime (WASM) 5.6 (compressed; 26.9 unpacked) MB + transformers.js 166 kB (Brotli, jsDelivr); afterwards from the browser cache |
 | Earlier pipeline variant (all clips in one xfade graph) | 30 s / 10 clips: 1119 MB; 60 clips: ≈ 3.9 GB (FFmpeg alone) — therefore dropped |
 
 Render times and memory on Render: **UNKNOWN** (depend on the instance type).
@@ -507,6 +508,8 @@ Render times and memory on Render: **UNKNOWN** (depend on the instance type).
 - Before every render the project is saved (pending changes and a running save are awaited), because the backend renders the saved state.
 - Cause of the "different photos get added" bug: see CHANGELOG 0.3.0.
 
+- transformers.js is loaded at runtime from jsDelivr instead of as an npm package (owner, 2026-09-27): the package pulled in `onnxruntime-node` (548 MB), which the browser never uses. Measured: root `npm ci` 58 s / `node_modules` 903 MB → 20 s / 143 MB; `dist/` 776 kB without the unused WASM copy (previously 26.9 MB).
+
 ### Limitations
 
 - **DATA_DIR is lost on every redeploy on Render** (no persistent disk). Accepted until stage 3 (R2): users, projects, uploads and renders disappear; issued JWTs become invalid if `JWT_SECRET` is regenerated.
@@ -528,8 +531,7 @@ Render times and memory on Render: **UNKNOWN** (depend on the instance type).
 - Depth needs the browser model: first download 27.3 MB + 5.6 (compressed; 26.9 unpacked) MB, computation time per photo on weak phones: **UNKNOWN** (measured only in desktop headless Chrome). Images without CORS permission cannot be read → Ken Burns.
 - Depth maps live in DATA_DIR like all uploads and are lost on redeploy. The next time the editor is opened (parallax on) the frontend checks the maps and recomputes missing ones; a render in between uses Ken Burns.
 - Render time and memory on Render (0.5 CPU, 512 MB): **UNKNOWN**; locally measured values see the table.
-- The build copies the ONNX Runtime WASM file (26.9 MB) to `dist/assets`; at runtime transformers.js loads it from the jsDelivr CDN instead (measured in the browser test). The copy is deployed but not used.
-- `@huggingface/transformers` pulls in `onnxruntime-node` (548 MB) as a hard dependency that the browser never uses: `npm ci` at the root took 58 s locally, `node_modules` is 903 MB. Option for the owner to decide: load transformers.js at runtime from the jsDelivr CDN (the WASM file comes from there anyway) — saves the install and the unused copy in `dist/`, but needs another browser test.
+- Depth needs browser access to cdn.jsdelivr.net (transformers.js, ONNX Runtime WASM) and huggingface.co (model). If they are blocked or offline, the Visual block shows a notice and photos get Ken Burns.
 
 ### Next steps
 
@@ -685,7 +687,7 @@ server/
 
 ### 2.5D-параллакс и эффекты под бит (с 0.4.0)
 
-**Карты глубины в браузере.** Переключатель «Объём (2.5D)» наверху блока «Визуал». При включении браузер один раз загружает transformers.js (отдельный чанк) и открытую модель **Depth Anything V2 Small** (`onnx-community/depth-anything-v2-small`, ONNX, 8-битная квантизация, файл `model_quantized.onnx` 27,3 МБ, лицензия **Apache-2.0** по карточке модели) с Hugging Face, а также ONNX Runtime Web (WASM) с CDN jsDelivr; всё кэшируется браузером. Каждое фото уменьшается до 1280 px по длинной стороне, считается глубина (светлое = близко), порог переднего плана выбирается методом Оцу (в пределах 40–85-го перцентиля), карта отправляется PNG в оттенках серого на `POST /api/upload/depth`; медиа-элемент получает `depth: { id, url, threshold }`. Прогресс «Готовим объём: 3 из 15», значок на готовых фото. Видео пропускаются.
+**Карты глубины в браузере.** Переключатель «Объём (2.5D)» наверху блока «Визуал». При включении браузер один раз загружает transformers.js (во время работы с CDN jsDelivr, фиксированная версия 4.3.0, `dist/transformers.min.js`; не npm-зависимость) и открытую модель **Depth Anything V2 Small** (`onnx-community/depth-anything-v2-small`, ONNX, 8-битная квантизация, файл `model_quantized.onnx` 27,3 МБ, лицензия **Apache-2.0** по карточке модели) с Hugging Face, а также ONNX Runtime Web (WASM) с CDN jsDelivr; всё кэшируется браузером. Каждое фото уменьшается до 1280 px по длинной стороне, считается глубина (светлое = близко), порог переднего плана выбирается методом Оцу (в пределах 40–85-го перцентиля), карта отправляется PNG в оттенках серого на `POST /api/upload/depth`; медиа-элемент получает `depth: { id, url, threshold }`. Прогресс «Готовим объём: 3 из 15», значок на готовых фото. Видео пропускаются.
 
 **Параллакс при рендере** (`parallaxSource` в `server/src/render/pipeline.js`). Выбран метод **двух слоёв с мягкой маской глубины**, а не `displace`. `displace` требует на каждый кадр свою карту смещения (`geq` на каждый пиксель каждого кадра) — на 0,5 CPU слишком медленно. Вместо этого **один раз на фото** готовятся два слоя в PNG (`prepareParallaxLayers`, ≈ 0,5 с, ≈ 150 МБ): слегка увеличенный передний план с мягкой альфа-маской из карты глубины (порог + размытие) и фон, в котором область переднего плана заполнена из окружения (нормализованная свёртка: размытие(изображение × вес фона) ÷ размытие(вес фона)), — поэтому открывающийся при сдвиге край показывает цвета фона, а не двойное изображение. В каждой части оба слоя декодируются один раз и повторяются через `loop`; на каждом кадре — только обрезка фона (малый дрейф) и наложение переднего плана (дрейф ≈ в 3 раза больше), без масштабирования на каждом кадре. Направление меняется от кадра к кадру. Длительность, переходы и склейки под бит не меняются (та же логика частей). Нет карты глубины (модель не загрузилась, старый браузер, чужой или потерянный файл) → Ken Burns без ошибок; видео-клипы → параллакс никогда.
 
@@ -750,7 +752,7 @@ VITE_API_URL=http://localhost:8080 npm run dev
 | Ролик 30 с, 9:16, 10 фото, **параллакс + «Энергично»**, склейка под бит (0.4.0) | 18 661 мс, пик RSS сервер + FFmpeg 279 МБ |
 | Ролик 3 мин, 9:16, 10 фото, **параллакс + «Энергично»**, склейка под бит (0.4.0) | 98 762 мс, пик 286 МБ |
 | Карта глубины в браузере (headless Chrome, WASM, 1 фото ≤ 1280 px) | ≈ 9 800–10 800 мс на фото (после загрузки модели) |
-| Загрузка при первом включении «Объёма» | модель 27,3 МБ + ONNX Runtime (WASM) 5,6 (в сжатом виде; 26,9 распакованная) МБ + transformers.js 169 кБ (gzip); дальше из кэша браузера |
+| Загрузка при первом включении «Объёма» | модель 27,3 МБ + ONNX Runtime (WASM) 5,6 (в сжатом виде; 26,9 распакованная) МБ + transformers.js 166 кБ (Brotli, jsDelivr); дальше из кэша браузера |
 | Прежний вариант конвейера (все клипы в одном графе xfade) | 30 с / 10 клипов: 1119 МБ; 60 клипов: ≈ 3,9 ГБ (только FFmpeg) — поэтому отказались |
 
 Время рендера и память на Render: **UNKNOWN** (зависят от типа инстанса).
@@ -776,6 +778,8 @@ VITE_API_URL=http://localhost:8080 npm run dev
 - Перед каждым рендером проект сохраняется (с ожиданием отложенных изменений и текущего сохранения), потому что бэкенд рендерит сохранённое состояние.
 - Причина ошибки «добавляются не те фото» — см. CHANGELOG 0.3.0.
 
+- transformers.js загружается во время работы с jsDelivr, а не как npm-пакет (владелец, 2026-09-27): пакет тянул `onnxruntime-node` (548 МБ), который браузер не использует. Замерено: `npm ci` в корне 58 с / `node_modules` 903 МБ → 20 с / 143 МБ; `dist/` 776 кБ без неиспользуемой копии WASM (раньше 26,9 МБ).
+
 ### Ограничения
 
 - **DATA_DIR теряется при каждом редеплое на Render** (нет постоянного диска). До этапа 3 (R2) это допустимо: пользователи, проекты, загрузки и рендеры пропадают; выданные JWT становятся недействительными, если `JWT_SECRET` сгенерирован заново.
@@ -797,8 +801,7 @@ VITE_API_URL=http://localhost:8080 npm run dev
 - Объёму нужна модель в браузере: первая загрузка 27,3 МБ + 5,6 (в сжатом виде; 26,9 распакованная) МБ, время расчёта на фото на слабых телефонах — **UNKNOWN** (замерено только в десктопном headless Chrome). Изображения без разрешения CORS прочитать нельзя → Ken Burns.
 - Карты глубины хранятся в DATA_DIR, как все загрузки, и теряются при редеплое. При следующем открытии редактора (параллакс включён) фронтенд проверяет карты и пересчитывает недостающие; рендер в промежутке использует Ken Burns.
 - Время рендера и память на Render (0,5 CPU, 512 МБ) — **UNKNOWN**; локальные замеры — в таблице.
-- Сборка копирует файл ONNX Runtime WASM (26,9 МБ) в `dist/assets`, но во время работы transformers.js берёт его с CDN jsDelivr (замерено в браузерном тесте). Копия деплоится, но не используется.
-- `@huggingface/transformers` тянет `onnxruntime-node` (548 МБ) как обязательную зависимость, которая в браузере не используется: `npm ci` в корне локально занял 58 с, `node_modules` — 903 МБ. Вариант на решение владельца: загружать transformers.js во время работы с CDN jsDelivr (WASM и так берётся оттуда) — это убирает установку и неиспользуемую копию в `dist/`, но требует повторного браузерного теста.
+- Для объёма браузеру нужен доступ к cdn.jsdelivr.net (transformers.js, WASM ONNX Runtime) и huggingface.co (модель). Если они заблокированы или нет сети, в блоке «Визуал» появляется сообщение, а фото получают Ken Burns.
 
 ### Следующие шаги
 

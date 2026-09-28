@@ -60,7 +60,7 @@ src/
 
 - Routen: `/`, `/login`, `/register` öffentlich; `/start`, `/editor/:projectId`, `/projects`, `/library`, `/export/:projectId`, `/account` geschützt (Gäste → `/login` und zurück).
 - API-Client `src/lib/api.ts`: Basis-URL aus `VITE_API_URL`, Header `Authorization: Bearer <token>`. Ist `VITE_API_URL` leer, bei Netzwerkfehler oder HTTP 502/503/504 schaltet er für die Sitzung auf Mocks um (`src/lib/mock.ts`, Footer zeigt „Demo-Modus“). Projekte werden zusätzlich in `localStorage` gecacht.
-- i18n DE (Standard) / EN / RU, typisierte Schlüssel. PWA: Manifest, Icons, `public/sw.js` (nur im Production-Build registriert).
+- i18n DE (Standard) / EN / RU, typisierte Schlüssel. PWA: Manifest, Icons, `public/sw.js` (nur im Production-Build registriert). Link-Vorschau: Open-Graph-/Twitter-Tags in `index.html`, Bild `public/og-image.jpg` (1200×675).
 - localStorage-Schlüssel: `fv_token`, `fv_lang`, `fv_projects`, `fv_uploads`, `fv_mock_users`, `fv_mock_jobs`, `fv_mock_history`.
 
 #### Backend (`server/`)
@@ -330,7 +330,7 @@ src/
 
 - Routes: `/`, `/login`, `/register` public; `/start`, `/editor/:projectId`, `/projects`, `/library`, `/export/:projectId`, `/account` protected (guests → `/login` and back).
 - API client `src/lib/api.ts`: base URL from `VITE_API_URL`, header `Authorization: Bearer <token>`. If `VITE_API_URL` is empty, on a network error or on HTTP 502/503/504 it switches to mocks for the session (`src/lib/mock.ts`, footer shows "Demo mode"). Projects are also cached in `localStorage`.
-- i18n DE (default) / EN / RU, typed keys. PWA: manifest, icons, `public/sw.js` (registered in production builds only).
+- i18n DE (default) / EN / RU, typed keys. PWA: manifest, icons, `public/sw.js` (registered in production builds only). Link preview: Open Graph / Twitter tags in `index.html`, image `public/og-image.jpg` (1200×675).
 - localStorage keys: `fv_token`, `fv_lang`, `fv_projects`, `fv_uploads`, `fv_mock_users`, `fv_mock_jobs`, `fv_mock_history`.
 
 #### Backend (`server/`)
@@ -600,7 +600,7 @@ src/
 
 - Маршруты: `/`, `/login`, `/register` открытые; `/start`, `/editor/:projectId`, `/projects`, `/library`, `/export/:projectId`, `/account` защищённые (гость → `/login` и обратно).
 - API-клиент `src/lib/api.ts`: базовый URL из `VITE_API_URL`, заголовок `Authorization: Bearer <token>`. Если `VITE_API_URL` пуст, при сетевой ошибке или HTTP 502/503/504 — переключение на моки до конца сессии (`src/lib/mock.ts`, в футере «Демо-режим»). Проекты дополнительно кэшируются в `localStorage`.
-- i18n DE (по умолчанию) / EN / RU, типизированные ключи. PWA: манифест, иконки, `public/sw.js` (регистрируется только в production-сборке).
+- i18n DE (по умолчанию) / EN / RU, типизированные ключи. PWA: манифест, иконки, `public/sw.js` (регистрируется только в production-сборке). Превью ссылки: теги Open Graph / Twitter в `index.html`, картинка `public/og-image.jpg` (1200×675).
 - Ключи localStorage: `fv_token`, `fv_lang`, `fv_projects`, `fv_uploads`, `fv_mock_users`, `fv_mock_jobs`, `fv_mock_history`.
 
 #### Бэкенд (`server/`)

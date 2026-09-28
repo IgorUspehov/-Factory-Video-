@@ -8,7 +8,7 @@
 
 ### [Unreleased]
 
-- —
+- Link-Vorschau (Telegram / WhatsApp / LinkedIn): `public/og-image.jpg` (1200×675) → `https://factory-video.onrender.com/og-image.jpg`; Open-Graph- und Twitter-Card-Tags in `index.html` (absolute URLs, Text auf Englisch).
 
 ### [0.4.1] — 2026-09-27
 
@@ -73,7 +73,7 @@ Erste Version des Frontends.
 
 ### [Unreleased]
 
-- —
+- Link preview (Telegram / WhatsApp / LinkedIn): `public/og-image.jpg` (1200×675) → `https://factory-video.onrender.com/og-image.jpg`; Open Graph and Twitter Card tags in `index.html` (absolute URLs, English text).
 
 ### [0.4.1] — 2026-09-27
 
@@ -138,7 +138,7 @@ First version of the frontend.
 
 ### [Unreleased]
 
-- —
+- Превью ссылки (Telegram / WhatsApp / LinkedIn): `public/og-image.jpg` (1200×675) → `https://factory-video.onrender.com/og-image.jpg`; теги Open Graph и Twitter Card в `index.html` (полные адреса, текст на английском).
 
 ### [0.4.1] — 2026-09-27
 

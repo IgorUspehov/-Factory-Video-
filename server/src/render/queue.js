@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
 import path from 'node:path';
 import { config, limits } from '../config.js';
+import { withHeavyLock } from '../heavy.js';
 import { fetchRemote } from '../media.js';
 import { storage } from '../storage/index.js';
 import { renderProject } from './pipeline.js';
@@ -79,7 +80,7 @@ export function createRenderQueue(db) {
     try {
       while (pending.length) {
         const job = db.get('jobs', pending.shift());
-        if (job && (job.status === 'queued' || job.status === 'rendering')) await process(job);
+        if (job && (job.status === 'queued' || job.status === 'rendering')) await withHeavyLock(() => process(job));
       }
     } finally {
       busy = false;

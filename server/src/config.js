@@ -34,6 +34,15 @@ export const config = {
     // where the JSON database is mirrored (use e.g. db-dev/ locally so development never touches production data)
     dbPrefix: (env.R2_DB_PREFIX || 'db/').replace(/^\/+/, '').replace(/\/*$/, '/'),
   },
+  avatar: {
+    replicateToken: env.REPLICATE_API_TOKEN || '',
+    runpodKey: env.RUNPOD_API_KEY || '',
+    runpodEndpoint: env.RUNPOD_ENDPOINT_ID || 'infinitetalk',
+    anthropicKey: env.ANTHROPIC_API_KEY || '',
+    translateModel: env.AVATAR_TRANSLATE_MODEL || 'claude-haiku-5-5',
+    // the avatar is the owner's own face and voice: only these accounts may use it
+    ownerEmails: (env.AVATAR_OWNER_EMAILS || '').split(',').map((e) => e.trim().toLowerCase()).filter(Boolean),
+  },
   fontsDir: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../fonts'),
 };
 

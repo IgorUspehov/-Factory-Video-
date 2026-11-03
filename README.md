@@ -164,6 +164,8 @@ Fehlerformat: `{ error: <code>, message }` — der Frontend-Client liest `error`
 | `PEXELS_API_KEY` | optional; ohne Schlüssel liefert `/api/library/media` die statische Liste |
 | `PUBLIC_URL` | öffentliche Basis-URL für Datei-Links; fehlt sie, wird Renders `RENDER_EXTERNAL_URL` genutzt |
 | `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` | Cloudflare R2; sind alle vier gesetzt, liegen Uploads und Renders in R2 (`DATA_DIR/files` nur noch Cache), sonst lokale Platte. Die JSON-DB liegt in `DATA_DIR/db` und wird mit R2 gespiegelt (Präfix `R2_DB_PREFIX`, Standard `db/`; lokal `db-dev/` setzen) |
+| `AVATAR_OWNER_EMAILS` | Avatar-Block (in Arbeit): E-Mails der Konten, die ihn nutzen dürfen (Komma-getrennt); leer = niemand |
+| `REPLICATE_API_TOKEN`, `RUNPOD_API_KEY`, `RUNPOD_ENDPOINT_ID`, `ANTHROPIC_API_KEY`, `AVATAR_TRANSLATE_MODEL` | Avatar: Stimme (Replicate), Video (RunPod, Standard `infinitetalk`), Übersetzung (Claude Haiku) |
 
 Frontend: `VITE_API_URL` = URL des Backends (wird beim Build eingesetzt).
 
@@ -435,6 +437,8 @@ Error format: `{ error: <code>, message }` — the frontend client reads `error`
 | `PEXELS_API_KEY` | optional; without it `/api/library/media` returns the static list |
 | `PUBLIC_URL` | public base URL for file links; if missing, Render's `RENDER_EXTERNAL_URL` is used |
 | `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` | Cloudflare R2; when all four are set, uploads and renders live in R2 (`DATA_DIR/files` is only a cache), otherwise the local disk. The JSON DB lives in `DATA_DIR/db` and is mirrored to R2 (prefix `R2_DB_PREFIX`, default `db/`; set `db-dev/` locally) |
+| `AVATAR_OWNER_EMAILS` | avatar block (work in progress): e-mails of the accounts allowed to use it (comma-separated); empty = nobody |
+| `REPLICATE_API_TOKEN`, `RUNPOD_API_KEY`, `RUNPOD_ENDPOINT_ID`, `ANTHROPIC_API_KEY`, `AVATAR_TRANSLATE_MODEL` | avatar: voice (Replicate), video (RunPod, default `infinitetalk`), translation (Claude Haiku) |
 
 Frontend: `VITE_API_URL` = backend URL (inlined at build time).
 
@@ -706,6 +710,8 @@ server/
 | `PEXELS_API_KEY` | необязательно; без ключа `/api/library/media` отдаёт статический список |
 | `PUBLIC_URL` | публичный базовый URL для ссылок на файлы; если не задан — используется `RENDER_EXTERNAL_URL` от Render |
 | `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` | Cloudflare R2; если заданы все четыре, загрузки и рендеры лежат в R2 (`DATA_DIR/files` — только кэш), иначе локальный диск. JSON-БД лежит в `DATA_DIR/db` и зеркалируется в R2 (префикс `R2_DB_PREFIX`, по умолчанию `db/`; локально задайте `db-dev/`) |
+| `AVATAR_OWNER_EMAILS` | блок «Аватар» (в работе): e-mail аккаунтов, которым он доступен (через запятую); пусто = никому |
+| `REPLICATE_API_TOKEN`, `RUNPOD_API_KEY`, `RUNPOD_ENDPOINT_ID`, `ANTHROPIC_API_KEY`, `AVATAR_TRANSLATE_MODEL` | аватар: голос (Replicate), видео (RunPod, по умолчанию `infinitetalk`), перевод (Claude Haiku) |
 
 Фронтенд: `VITE_API_URL` = URL бэкенда (вшивается при сборке).
 

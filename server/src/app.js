@@ -15,6 +15,7 @@ import { listAudio, listMedia, MOODS, NICHES, ORIENTATIONS } from './library.js'
 import { libraryTracks } from './libraryData.js';
 import { suggest } from './assistant.js';
 import { DIMENSIONS, plannedDuration } from './render/pipeline.js';
+import { registerAvatarRoutes } from './avatar/routes.js';
 
 const AUDIO_EXT = new Set(['.mp3', '.wav', '.m4a']);
 const IMAGE_EXT = new Set(['.jpg', '.jpeg', '.png', '.webp']);
@@ -25,7 +26,7 @@ const pick = (obj, keys) => Object.fromEntries(keys.filter((k) => obj?.[k] !== u
 const publicProject = ({ userId: _u, ...p }) => p;
 const validLengthMode = (m) => m === 'track' || m === 'timeline' || (typeof m === 'number' && m > 0 && m <= limits.maxVideoSeconds);
 
-export function createApp({ db, queue }) {
+export function createApp({ db, queue, avatarQueue = null }) {
   const app = express();
   app.disable('x-powered-by');
   app.set('trust proxy', 1);
@@ -274,6 +275,9 @@ export function createApp({ db, queue }) {
     const own = project && project.userId === req.user.id ? project : null;
     res.json({ suggestion: suggest({ lang: String(req.body?.lang ?? 'de'), project: own, context: req.body?.context }) });
   });
+
+  // ---------------------------------------------------------------- avatar (owner only)
+  registerAvatarRoutes(app, { db, auth, withUpload, queue: avatarQueue });
 
   // ---------------------------------------------------------------- files
   // uploads/ keys are unguessable UUID paths; renders/ need a valid, unexpired signature.

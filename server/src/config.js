@@ -40,6 +40,8 @@ export const config = {
     runpodEndpoint: env.RUNPOD_ENDPOINT_ID || 'infinitetalk',
     anthropicKey: env.ANTHROPIC_API_KEY || '',
     translateModel: env.AVATAR_TRANSLATE_MODEL || 'claude-haiku-5-5',
+    // every job costs real money ($0.25 + cents): cap per user and 24 h
+    dailyLimit: Number(env.AVATAR_DAILY_LIMIT) > 0 ? Number(env.AVATAR_DAILY_LIMIT) : 10,
     // the avatar is the owner's own face and voice: only these accounts may use it
     ownerEmails: (env.AVATAR_OWNER_EMAILS || '').split(',').map((e) => e.trim().toLowerCase()).filter(Boolean),
   },

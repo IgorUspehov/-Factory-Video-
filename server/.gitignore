@@ -3,3 +3,6 @@ data
 .env
 .env.*
 !.env.example
+
+# probe outputs (audio/video from provider tests)
+probe-out/

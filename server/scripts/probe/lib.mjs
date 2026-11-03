@@ -35,8 +35,23 @@ export async function fileOrUrl(v) {
   return `data:${MIME[path.extname(v).toLowerCase()] ?? 'application/octet-stream'};base64,${buf.toString('base64')}`;
 }
 
+/** fetch with retries on network errors. POST is retried only when the TCP connection was never established (request not sent). */
+export async function fetchRetry(url, opts = {}, tries = 6) {
+  for (let i = 1; ; i++) {
+    try {
+      return await fetch(url, opts);
+    } catch (err) {
+      const connectFailed = (err.cause?.errors ?? [err.cause]).every((e) => e?.syscall === 'connect');
+      const safe = (opts.method ?? 'GET') === 'GET' || connectFailed;
+      if (!safe || i >= tries) throw err;
+      console.warn(`\n  network error (${err.cause?.code ?? err.message}), retry ${i}/${tries - 1}`);
+      await sleep(3000 * i);
+    }
+  }
+}
+
 export async function json(url, opts = {}) {
-  const res = await fetch(url, opts);
+  const res = await fetchRetry(url, opts);
   const text = await res.text();
   let body;
   try {

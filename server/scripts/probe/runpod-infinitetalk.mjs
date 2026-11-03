@@ -6,6 +6,7 @@
 // --image/--audio: public URL or local file (a local file is sent as a data: URI — whether the endpoint accepts that is UNKNOWN;
 //   if it rejects it, upload the file somewhere public and pass the URL).
 // --dry prints the request without sending (no cost). Cost seen manually: $0.25 per clip (22 s audio).
+import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { args, download, fileOrUrl, json, need, secs, sleep } from './lib.mjs';
 
@@ -29,6 +30,8 @@ const headers = { Authorization: `Bearer ${need('RUNPOD_API_KEY')}`, 'Content-Ty
 const t0 = Date.now();
 const job = await json(`${BASE}/${ID}/run`, { method: 'POST', headers, body: JSON.stringify({ input }) });
 console.log('submitted:', JSON.stringify(job));
+await mkdir(a.out ?? 'probe-out', { recursive: true });
+await writeFile(path.join(a.out ?? 'probe-out', 'last-job.json'), JSON.stringify({ endpoint: ID, id: job.id, at: new Date().toISOString() })); // so a paid job is never lost
 let st = job;
 let delay = 5000;
 while (!['COMPLETED', 'FAILED', 'CANCELLED', 'TIMED_OUT'].includes(st.status)) {

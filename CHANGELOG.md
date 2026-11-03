@@ -8,6 +8,7 @@
 
 ### [Unreleased]
 
+- Speicher: Treiber für Cloudflare R2 (`server/src/storage/r2.js`, S3-API, `@aws-sdk/client-s3`). Aktiv, wenn `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` und `R2_BUCKET` gesetzt sind, sonst lokale Platte. R2 ist die Quelle, `DATA_DIR/files` nur Cache: Uploads behalten eine lokale Kopie, Renders nicht; fehlende Dateien werden beim Zugriff nachgeladen. Die Route `/files` lädt vor dem Ausliefern nach. Selbsttest `server/scripts/test-r2.mjs` (9/9 gegen den echten Bucket), Smoke-Test 165/165 im lokalen Modus. **Noch nicht in R2: die JSON-Datenbank** (`DATA_DIR/db`), sie geht bei einem Redeploy weiter verloren.
 - Link-Vorschau (Telegram / WhatsApp / LinkedIn): `public/og-image.jpg` (1200×675) → `https://factory-video.onrender.com/og-image.jpg`; Open-Graph- und Twitter-Card-Tags in `index.html` (absolute URLs, Text auf Englisch).
 
 ### [0.4.1] — 2026-09-27
@@ -73,6 +74,7 @@ Erste Version des Frontends.
 
 ### [Unreleased]
 
+- Storage: Cloudflare R2 driver (`server/src/storage/r2.js`, S3 API, `@aws-sdk/client-s3`). Active when `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` and `R2_BUCKET` are set, otherwise the local disk. R2 is the source of truth, `DATA_DIR/files` only a cache: uploads keep a local copy, renders do not; missing files are fetched on access. The `/files` route fetches before serving. Self-test `server/scripts/test-r2.mjs` (9/9 against the real bucket), smoke test 165/165 in local mode. **Not yet in R2: the JSON database** (`DATA_DIR/db`); it is still lost on redeploy.
 - Link preview (Telegram / WhatsApp / LinkedIn): `public/og-image.jpg` (1200×675) → `https://factory-video.onrender.com/og-image.jpg`; Open Graph and Twitter Card tags in `index.html` (absolute URLs, English text).
 
 ### [0.4.1] — 2026-09-27
@@ -138,6 +140,7 @@ First version of the frontend.
 
 ### [Unreleased]
 
+- Хранилище: драйвер Cloudflare R2 (`server/src/storage/r2.js`, S3 API, `@aws-sdk/client-s3`). Включается, когда заданы `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` и `R2_BUCKET`, иначе локальный диск. R2 — источник, `DATA_DIR/files` — только кэш: загрузки сохраняют локальную копию, рендеры нет; отсутствующие файлы подгружаются при обращении. Маршрут `/files` подгружает файл перед отдачей. Самотест `server/scripts/test-r2.mjs` (9/9 на настоящем бакете), smoke-тест 165/165 в локальном режиме. **В R2 пока нет JSON-базы** (`DATA_DIR/db`): при редеплое она по-прежнему теряется.
 - Превью ссылки (Telegram / WhatsApp / LinkedIn): `public/og-image.jpg` (1200×675) → `https://factory-video.onrender.com/og-image.jpg`; теги Open Graph и Twitter Card в `index.html` (полные адреса, текст на английском).
 
 ### [0.4.1] — 2026-09-27

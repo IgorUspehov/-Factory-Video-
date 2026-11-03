@@ -26,6 +26,12 @@ export const config = {
   pexelsBase: (env.PEXELS_API_BASE || 'https://api.pexels.com').replace(/\/+$/, ''),
   // Render sets RENDER_EXTERNAL_URL automatically; PUBLIC_URL wins when both exist.
   publicUrl: (env.PUBLIC_URL || env.RENDER_EXTERNAL_URL || `http://localhost:${port}`).replace(/\/+$/, ''),
+  r2: {
+    accountId: env.R2_ACCOUNT_ID || '',
+    accessKeyId: env.R2_ACCESS_KEY_ID || '',
+    secretAccessKey: env.R2_SECRET_ACCESS_KEY || '',
+    bucket: env.R2_BUCKET || '',
+  },
   fontsDir: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../fonts'),
 };
 

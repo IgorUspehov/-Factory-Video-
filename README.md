@@ -163,6 +163,7 @@ Fehlerformat: `{ error: <code>, message }` — der Frontend-Client liest `error`
 | `FRONTEND_ORIGIN` | erlaubte CORS-Origin(s), kommagetrennt |
 | `PEXELS_API_KEY` | optional; ohne Schlüssel liefert `/api/library/media` die statische Liste |
 | `PUBLIC_URL` | öffentliche Basis-URL für Datei-Links; fehlt sie, wird Renders `RENDER_EXTERNAL_URL` genutzt |
+| `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` | Cloudflare R2; sind alle vier gesetzt, liegen Uploads und Renders in R2 (`DATA_DIR/files` nur noch Cache), sonst lokale Platte. Die JSON-DB liegt weiterhin in `DATA_DIR/db` |
 
 Frontend: `VITE_API_URL` = URL des Backends (wird beim Build eingesetzt).
 
@@ -433,6 +434,7 @@ Error format: `{ error: <code>, message }` — the frontend client reads `error`
 | `FRONTEND_ORIGIN` | allowed CORS origin(s), comma-separated |
 | `PEXELS_API_KEY` | optional; without it `/api/library/media` returns the static list |
 | `PUBLIC_URL` | public base URL for file links; if missing, Render's `RENDER_EXTERNAL_URL` is used |
+| `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` | Cloudflare R2; when all four are set, uploads and renders live in R2 (`DATA_DIR/files` is only a cache), otherwise the local disk. The JSON DB still lives in `DATA_DIR/db` |
 
 Frontend: `VITE_API_URL` = backend URL (inlined at build time).
 
@@ -703,6 +705,7 @@ server/
 | `FRONTEND_ORIGIN` | разрешённые CORS-источники через запятую |
 | `PEXELS_API_KEY` | необязательно; без ключа `/api/library/media` отдаёт статический список |
 | `PUBLIC_URL` | публичный базовый URL для ссылок на файлы; если не задан — используется `RENDER_EXTERNAL_URL` от Render |
+| `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` | Cloudflare R2; если заданы все четыре, загрузки и рендеры лежат в R2 (`DATA_DIR/files` — только кэш), иначе локальный диск. JSON-БД по-прежнему в `DATA_DIR/db` |
 
 Фронтенд: `VITE_API_URL` = URL бэкенда (вшивается при сборке).
 

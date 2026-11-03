@@ -277,15 +277,17 @@ export function createApp({ db, queue }) {
 
   // ---------------------------------------------------------------- files
   // uploads/ keys are unguessable UUID paths; renders/ need a valid, unexpired signature.
-  app.get(/^\/files\/(.+)$/, (req, res, next) => {
+  app.get(/^\/files\/(.+)$/, wrap(async (req, res, next) => {
     const key = req.params[0];
     if (!/^(uploads|renders)\/[\w-]+\/[\w-]+\.\w+$/.test(key)) return next(new HttpError(404, 'not_found'));
     if (key.startsWith('renders/') && !storage.verify(key, req.query.exp, req.query.sig)) return next(new HttpError(403, 'link_expired'));
     if (req.query.download === '1') res.attachment(path.basename(key));
-    res.sendFile(storage.filePath(key), { maxAge: key.startsWith('renders/') ? 0 : '7d' }, (err) => {
+    const file = await storage.localPath(key).catch(() => null); // R2: downloads into the cache first
+    if (!file) return next(new HttpError(404, 'not_found'));
+    res.sendFile(file, { maxAge: key.startsWith('renders/') ? 0 : '7d' }, (err) => {
       if (err && !res.headersSent) next(new HttpError(404, 'not_found'));
     });
-  });
+  }));
 
   // ---------------------------------------------------------------- errors
   app.use('/api', (_req, _res, next) => next(new HttpError(404, 'not_found')));

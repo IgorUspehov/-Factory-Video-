@@ -1,5 +1,10 @@
 import { config } from '../config.js';
 import { createLocalStorage } from './local.js';
+import { createR2Storage } from './r2.js';
 
-/** Single storage entry point; stage 3 swaps this for an R2 driver with the same interface. */
-export const storage = createLocalStorage({ dataDir: config.dataDir, publicUrl: config.publicUrl, secret: config.jwtSecret });
+const local = createLocalStorage({ dataDir: config.dataDir, publicUrl: config.publicUrl, secret: config.jwtSecret });
+const { r2 } = config;
+
+/** Cloudflare R2 when all four R2_* variables are set, otherwise the local disk (development, smoke tests). */
+export const storage = r2.accountId && r2.accessKeyId && r2.secretAccessKey && r2.bucket ? createR2Storage({ local, ...r2 }) : local;
+export const storageDriver = storage === local ? 'local' : 'r2';

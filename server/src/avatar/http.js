@@ -17,6 +17,20 @@ export async function fetchRetry(url, opts = {}, tries = 5) {
   }
 }
 
+/** Seconds to wait before retrying: the Retry-After header (seconds or a date), else "available in N seconds" from the body. */
+export function retryAfterSeconds(res, body) {
+  const h = res.headers.get('retry-after');
+  if (h) {
+    const n = Number(h);
+    if (Number.isFinite(n)) return Math.max(0, n);
+    const t = Date.parse(h);
+    if (Number.isFinite(t)) return Math.max(0, (t - Date.now()) / 1000);
+  }
+  const text = typeof body === 'string' ? body : JSON.stringify(body);
+  const m = /available in (\d+(?:\.\d+)?) ?s/i.exec(text) ?? /retry_after"?:\s*(\d+(?:\.\d+)?)/i.exec(text);
+  return m ? Number(m[1]) : undefined;
+}
+
 /** JSON request; throws an Error with `.status` (and no secrets) on a non-2xx answer. */
 export async function jsonRequest(url, opts = {}) {
   const res = await fetchRetry(url, opts);
@@ -30,6 +44,7 @@ export async function jsonRequest(url, opts = {}) {
   if (!res.ok) {
     const err = new Error(`${opts.method ?? 'GET'} ${new URL(url).host}${new URL(url).pathname} -> ${res.status}: ${(typeof body === 'string' ? body : JSON.stringify(body)).slice(0, 300)}`);
     err.status = res.status;
+    err.retryAfter = retryAfterSeconds(res, body);
     throw err;
   }
   return body;

@@ -10,7 +10,8 @@ import { createTranslator } from '../src/avatar/providers/translate.js';
 
 let failed = 0;
 const check = (n, ok, x = '') => (ok || failed++, console.log(`${ok ? 'PASS' : 'FAIL'}  ${n}${x ? '  ' + x : ''}`));
-const seen = { replicatePosts: [], officialRoute: 0, runSubmits: 0, messages: [], statusCalls: 0 };
+const seen = { replicatePosts: [], officialRoute: 0, runSubmits: 0, messages: [], statusCalls: 0, throttled: 0, postTimes: [], serverErrors: 0 };
+const throttle = { left: 0, mode: 'header', retryAfter: '1', fail500: 0 };
 let runMode = 'ok';
 
 const server = createServer(async (req, res) => {
@@ -21,7 +22,20 @@ const server = createServer(async (req, res) => {
   const url = req.url;
   if (url === '/rep/models/resemble-ai/chatterbox-multilingual') return send(200, { latest_version: { id: 'ver123' } });
   if (url.endsWith('/predictions') && url.includes('/models/')) return seen.officialRoute++, send(404, { detail: 'not found' });
+  if (url === '/rep/predictions' && req.method === 'POST' && throttle.fail500 > 0) {
+    throttle.fail500--;
+    seen.serverErrors++;
+    return send(500, { detail: 'boom' });
+  }
+  if (url === '/rep/predictions' && req.method === 'POST' && throttle.left > 0) {
+    throttle.left--;
+    seen.throttled++;
+    const text = JSON.stringify({ detail: throttle.mode === 'body' ? 'Request was throttled. Expected available in 1 seconds.' : 'Request was throttled.', status: 429 });
+    res.writeHead(429, { 'content-type': 'application/json', ...(throttle.mode === 'header' ? { 'retry-after': throttle.retryAfter } : {}) });
+    return res.end(text);
+  }
   if (url === '/rep/predictions' && req.method === 'POST') {
+    seen.postTimes.push(Date.now());
     seen.replicatePosts.push({ body, auth: req.headers.authorization, prefer: req.headers.prefer });
     return send(201, { id: 'pred1', status: 'starting', urls: { get: `http://127.0.0.1:${port}/rep/predictions/pred1` } });
   }
@@ -61,6 +75,58 @@ try {
   check('TTS rejects > 300 chars', await rep.synthesize({ text: 'x'.repeat(301), language: 'en', referenceAudio: 'a', outFile: path.join(dir, 'b') }).then(() => false, (e) => e.message === 'invalid_tts_text'));
   check('TTS rejects unsupported language', await rep.synthesize({ text: 'x', language: 'fr', referenceAudio: 'a', outFile: path.join(dir, 'b') }).then(() => false, (e) => /unsupported_language/.test(e.message)));
   check('Replicate without token refuses', (() => { try { createReplicate({}); return false; } catch (e) { return e.message === 'replicate_not_configured'; } })());
+
+  // ---- Replicate rate limit (429): the request was rejected, so it is safe to repeat; never more than one prediction per call
+  const fast = { maxEachMs: 3000, maxWaitMs: 6000, spacingMs: 400, spacingForMs: 60_000, fallbackWaitMs: 500 };
+  const mkRep = () => createReplicate({ token: 'tok', base: `http://127.0.0.1:${port}/rep`, pollMs: 10, rateLimit: fast });
+  const synth = (r, text = 'Привет!') => r.synthesize({ text, language: 'ru', referenceAudio: 'data:audio/wav;base64,AAAA', outFile: path.join(dir, `rl-${Math.random()}.wav`) });
+  {
+    let r = mkRep();
+    let created = seen.replicatePosts.length;
+    Object.assign(throttle, { left: 2, mode: 'header', retryAfter: '1' });
+    let t0 = Date.now();
+    await synth(r);
+    check('429 with Retry-After: waits and succeeds', seen.throttled === 2 && Date.now() - t0 >= 1900, `${Date.now() - t0} ms`);
+    check('429 retries create exactly one prediction', seen.replicatePosts.length === created + 1);
+
+    r = mkRep();
+    seen.throttled = 0;
+    created = seen.replicatePosts.length;
+    Object.assign(throttle, { left: 1, mode: 'body' });
+    t0 = Date.now();
+    await synth(r);
+    check('429 without header: wait taken from "available in N seconds"', seen.throttled === 1 && Date.now() - t0 >= 1000 && seen.replicatePosts.length === created + 1, `${Date.now() - t0} ms`);
+
+    // after a 429 the creations are spaced out (two parts of one text, two jobs at once)
+    r = mkRep();
+    Object.assign(throttle, { left: 1, mode: 'header', retryAfter: '0' });
+    await synth(r);
+    seen.postTimes.length = 0;
+    await synth(r);
+    await synth(r);
+    check('after a 429 sequential creations keep the spacing', seen.postTimes.length === 2 && seen.postTimes[1] - seen.postTimes[0] >= 380, `${seen.postTimes[1] - seen.postTimes[0]} ms`);
+    seen.postTimes.length = 0;
+    await Promise.all([synth(r), synth(r), synth(r)]);
+    const gaps = seen.postTimes.slice(1).map((x, i) => x - seen.postTimes[i]);
+    check('parallel jobs are queued behind each other too', gaps.length === 2 && gaps.every((g) => g >= 380), gaps.join(', ') + ' ms');
+
+    // a limit that never lifts: give up with a readable error after a bounded number of attempts
+    r = mkRep();
+    seen.throttled = 0;
+    Object.assign(throttle, { left: 999, mode: 'header', retryAfter: '1' });
+    t0 = Date.now();
+    const err = await synth(r).then(() => null, (e) => e);
+    throttle.left = 0;
+    check('permanent 429 -> tts_rate_limited after the max wait', /tts_rate_limited/.test(err?.message ?? '') && err.status === 429 && Date.now() - t0 < 9000 && seen.throttled >= 2 && seen.throttled <= 8, `${seen.throttled} attempts, ${Date.now() - t0} ms`);
+
+    // other errors are not retried
+    r = mkRep();
+    const posts = seen.replicatePosts.length;
+    seen.serverErrors = 0;
+    throttle.fail500 = 1;
+    const e500 = await synth(r).then(() => null, (e) => e);
+    check('HTTP 500 is not retried', e500?.status === 500 && seen.serverErrors === 1 && seen.replicatePosts.length === posts);
+  }
 
   // ---- RunPod
   const rp = createRunpod({ apiKey: 'key', base: `http://127.0.0.1:${port}/rp` });

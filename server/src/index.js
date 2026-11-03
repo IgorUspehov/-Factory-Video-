@@ -2,9 +2,11 @@ import { config } from './config.js';
 import { createDb } from './db.js';
 import { createRenderQueue } from './render/queue.js';
 import { createApp } from './app.js';
-import { storageDriver } from './storage/index.js';
+import { dbMirror, storageDriver } from './storage/index.js';
 
-const db = createDb(config.dataDir);
+const db = createDb(config.dataDir, dbMirror);
+const hydrated = await db.hydrate();
+if (dbMirror) console.log(`[db] mirror ${config.r2.dbPrefix}: ${hydrated.downloaded} collection(s) restored from R2, ${hydrated.uploaded} uploaded`);
 const queue = createRenderQueue(db);
 const app = createApp({ db, queue });
 

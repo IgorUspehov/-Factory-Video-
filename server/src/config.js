@@ -31,6 +31,8 @@ export const config = {
     accessKeyId: env.R2_ACCESS_KEY_ID || '',
     secretAccessKey: env.R2_SECRET_ACCESS_KEY || '',
     bucket: env.R2_BUCKET || '',
+    // where the JSON database is mirrored (use e.g. db-dev/ locally so development never touches production data)
+    dbPrefix: (env.R2_DB_PREFIX || 'db/').replace(/^\/+/, '').replace(/\/*$/, '/'),
   },
   fontsDir: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../fonts'),
 };

@@ -50,6 +50,7 @@ import { TextPanel } from '../editor/panels/TextPanel';
 import { StylePanel } from '../editor/panels/StylePanel';
 import { MontagePanel } from '../editor/panels/MontagePanel';
 import { OutputPanel } from '../editor/panels/OutputPanel';
+import { AvatarPanel } from '../editor/panels/AvatarPanel';
 import { AssistantPanel } from '../editor/AssistantPanel';
 import { NextSteps } from '../editor/NextSteps';
 import { PlayerModal } from '../editor/PlayerModal';
@@ -63,6 +64,7 @@ const nodeTypes: NodeTypes = {
   style: BlockNode,
   montage: BlockNode,
   output: BlockNode,
+  avatar: BlockNode,
 };
 
 const toRfEdge = (e: FlowEdgeData): Edge => ({ ...e, animated: true });
@@ -74,6 +76,7 @@ const panels: Record<NodeKind, () => JSX.Element> = {
   style: StylePanel,
   montage: MontagePanel,
   output: OutputPanel,
+  avatar: AvatarPanel,
 };
 
 type NavId = 'projects' | 'canvas' | 'materials' | 'audio' | 'brand' | 'export';
@@ -389,6 +392,47 @@ function Workspace() {
   );
 }
 
+/** Talking-avatar projects: one block + its panel, none of the video-montage chrome. */
+function AvatarWorkspace() {
+  const { project, update, save, saveState, select } = useEditor();
+  const { t } = useI18n();
+  useEffect(() => select('avatar'), [select]);
+  const saveIcon =
+    saveState === 'saving' ? <Loader2 size={13} className="animate-spin" /> : saveState === 'error' ? <CloudOff size={13} /> : saveState === 'saved' ? <Check size={13} /> : null;
+  return (
+    <div className="flex h-[calc(100dvh-4rem)] flex-col">
+      <div className="flex h-14 shrink-0 items-center gap-2 border-b border-line bg-card/60 px-3 sm:px-4">
+        <Link to="/projects" className="btn-ghost p-2" aria-label={t('editor.nav.projects')} title={t('editor.navHint.projects')}>
+          <ArrowLeft size={18} />
+        </Link>
+        <input
+          className="min-w-0 flex-1 truncate rounded-lg border border-transparent bg-transparent px-2 py-1.5 font-display text-sm font-bold outline-none transition hover:border-line focus:border-accent sm:max-w-xs sm:text-base"
+          value={project.title}
+          onChange={(e) => update({ title: e.target.value })}
+          aria-label={t('editor.title')}
+          title={t('editor.titleHint')}
+        />
+        <span className={`hidden items-center gap-1 text-xs sm:flex ${saveState === 'error' ? 'text-red-300' : 'text-muted'}`} title={t('editor.autosaveHint')}>
+          {saveIcon}
+          {t(`editor.save.${saveState}`)}
+        </span>
+        <button className="btn-secondary btn-sm ml-auto" onClick={() => void save()} disabled={saveState === 'saved' || saveState === 'saving'} title={t('editor.saveHint')}>
+          <Save size={14} />
+          <span className="hidden sm:inline">{t('editor.saveBtn')}</span>
+        </button>
+      </div>
+      <div className="flex min-h-0 flex-1">
+        <div className="hidden min-w-0 flex-1 lg:block">
+          <Canvas />
+        </div>
+        <aside className="panel scrollbar-thin min-h-0 w-full overflow-y-auto bg-card px-5 py-5 pb-10 lg:w-[480px] lg:shrink-0 lg:border-l lg:border-line">
+          <AvatarPanel />
+        </aside>
+      </div>
+    </div>
+  );
+}
+
 export default function Editor() {
   const { projectId = '' } = useParams();
   const { t } = useI18n();
@@ -409,7 +453,7 @@ export default function Editor() {
       project && (
         <EditorProvider key={project.id} initial={project}>
           <ReactFlowProvider>
-            <Workspace />
+            {project.goal === 'avatar' ? <AvatarWorkspace /> : <Workspace />}
           </ReactFlowProvider>
         </EditorProvider>
       ),

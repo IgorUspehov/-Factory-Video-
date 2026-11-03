@@ -41,7 +41,7 @@ export const MOOD_STYLES: Record<Mood, StyleSettings> = {
   corporate: { background: '#0F172A', accent: '#3B82F6', text: '#FFFFFF', font: 'Montserrat', transition: 'slide', kenBurns: false, beatSync: false, audioFadeIn: true, audioFadeOut: true },
 };
 
-export const GOAL_TEXT_MODE: Record<Goal, TextMode> = { clip: 'lyrics', promo: 'slogan', reels: 'titles' };
+export const GOAL_TEXT_MODE: Record<Goal, TextMode> = { clip: 'lyrics', promo: 'slogan', reels: 'titles', avatar: 'titles' };
 
 export function defaultGraph(): { nodes: FlowNodeData[]; edges: FlowEdgeData[] } {
   // 3 × 2 grid: fits a typical canvas at a readable zoom
@@ -81,6 +81,27 @@ export function createDraft({ title, goal, format, mood, starterLines }: DraftOp
     style: { ...MOOD_STYLES[mood] },
     timeline: [],
     render: { status: 'idle', progress: 0 },
+  };
+}
+
+/** Talking-avatar project: one 'avatar' block, vertical 9:16, no montage pipeline. */
+export function createAvatarDraft(title: string): ProjectDraft {
+  return {
+    title,
+    goal: 'avatar',
+    format: '9:16',
+    mood: 'calm',
+    textMode: 'titles',
+    lengthMode: 'timeline',
+    nodes: [{ id: 'avatar', type: 'avatar', position: { x: 0, y: 0 } }],
+    edges: [],
+    audio: null,
+    media: [],
+    lyrics: [],
+    style: { ...MOOD_STYLES.calm },
+    timeline: [],
+    render: { status: 'idle', progress: 0 },
+    avatar: { text: '', languages: ['ru'] },
   };
 }
 

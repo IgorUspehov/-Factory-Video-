@@ -92,6 +92,22 @@ function Summary({ kind }: { kind: NodeKind }) {
         </div>
       );
     }
+    case 'avatar': {
+      const a = project.avatar;
+      if (!a?.text.trim()) return empty(t('nodes.avatarEmpty'));
+      return (
+        <div>
+          <div className="line-clamp-2 text-[13px]">{a.text}</div>
+          <div className="mt-1.5 flex gap-1">
+            {a.languages.map((l) => (
+              <span key={l} className="rounded bg-bg px-1.5 py-0.5 text-[11px] font-semibold uppercase text-accent-light">
+                {l}
+              </span>
+            ))}
+          </div>
+        </div>
+      );
+    }
     case 'montage': {
       const plan = effectiveTimeline(project);
       const total = plan.total;
@@ -165,7 +181,7 @@ function BlockNodeImpl({ type }: NodeProps) {
         active ? 'border-accent shadow-glow' : isOutput ? 'border-accent/50 shadow-glow-sm' : 'border-line hover:border-accent/50'
       }`}
     >
-      {kind !== 'audio' && <Handle type="target" position={Position.Left} />}
+      {kind !== 'audio' && kind !== 'avatar' && <Handle type="target" position={Position.Left} />}
       <div className="mb-3 flex items-start gap-3">
         <span className="icon-tile h-10 w-10 rounded-xl">
           <Icon size={18} />
@@ -176,7 +192,7 @@ function BlockNodeImpl({ type }: NodeProps) {
         </span>
       </div>
       <Summary kind={kind} />
-      {!isOutput && <Handle type="source" position={Position.Right} />}
+      {!isOutput && kind !== 'avatar' && <Handle type="source" position={Position.Right} />}
     </div>
   );
 }

@@ -8,11 +8,11 @@ export interface User {
   renewsAt: string | null;
 }
 
-export type Goal = 'clip' | 'promo' | 'reels';
+export type Goal = 'clip' | 'promo' | 'reels' | 'avatar';
 export type Format = '9:16' | '16:9' | '1:1';
 export type Mood = 'calm' | 'energetic' | 'premium' | 'corporate';
 export type Niche = 'music' | 'business' | 'lifestyle' | 'tech' | 'nature';
-export type NodeKind = 'audio' | 'visual' | 'text' | 'style' | 'montage' | 'output';
+export type NodeKind = 'audio' | 'visual' | 'text' | 'style' | 'montage' | 'output' | 'avatar';
 export type TextMode = 'titles' | 'slogan' | 'lyrics';
 export type Transition = 'cut' | 'fade' | 'zoom' | 'slide';
 export type RenderStatus = 'idle' | 'queued' | 'rendering' | 'done' | 'failed';
@@ -130,6 +130,8 @@ export interface Project {
   style: StyleSettings;
   timeline: TimelineClip[];
   render: RenderState;
+  /** only for goal 'avatar': the text (Russian) and the languages of the talking-avatar reels */
+  avatar?: AvatarDraft;
   createdAt: string;
   updatedAt: string;
 }
@@ -195,4 +197,41 @@ export interface BillingHistoryItem {
   format: Format;
   credits: number;
   status: RenderStatus;
+}
+
+export type AvatarLang = 'ru' | 'en' | 'de';
+
+export interface AvatarDraft {
+  text: string;
+  languages: AvatarLang[];
+}
+
+export interface AvatarProfile {
+  /** false while the provider keys are missing on the server */
+  configured: boolean;
+  hasPhoto: boolean;
+  hasVoice: boolean;
+  ready: boolean;
+  photo: { width: number; height: number; updatedAt: string } | null;
+  voice: { duration: number; updatedAt: string } | null;
+  limits: { textChars: number; languages: AvatarLang[]; dailyLimit: number; voiceSeconds: [number, number] };
+}
+
+export type AvatarJobStatus = 'queued' | 'running' | 'done' | 'failed';
+
+export interface AvatarJob {
+  id: string;
+  batchId: string;
+  projectId: string | null;
+  language: AvatarLang;
+  text: string;
+  status: AvatarJobStatus;
+  stage: 'translate' | 'tts' | 'talking' | 'compose' | 'done' | null;
+  progress: number;
+  error: string | null;
+  url: string | null;
+  expiresAt: string | null;
+  duration: number | null;
+  createdAt: string;
+  finishedAt: string | null;
 }

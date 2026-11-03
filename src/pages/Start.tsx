@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -10,13 +10,14 @@ import {
   Megaphone,
   Monitor,
   Music,
+  ScanFace,
   Smartphone,
   Square,
   type LucideIcon,
 } from 'lucide-react';
 import { useI18n, type TKey } from '../i18n';
 import { api } from '../lib/api';
-import { createDraft } from '../lib/project';
+import { createAvatarDraft, createDraft } from '../lib/project';
 import { formatKey, goalKey, moodKey } from '../lib/labels';
 import type { Format, Goal, Mood } from '../types';
 
@@ -37,7 +38,7 @@ const moods: { id: Mood; icon: LucideIcon; hint: TKey }[] = [
   { id: 'corporate', icon: Briefcase, hint: 'start.moodHints.corporate' },
 ];
 
-const defaultFormat: Record<Goal, Format> = { clip: '16:9', promo: '1:1', reels: '9:16' };
+const defaultFormat: Record<Goal, Format> = { clip: '16:9', promo: '1:1', reels: '9:16', avatar: '9:16' };
 
 export default function Start() {
   const { t, formatDate } = useI18n();
@@ -48,6 +49,26 @@ export default function Start() {
   const [mood, setMood] = useState<Mood | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
+  // the talking avatar is the owner's own face and voice: the option exists only for accounts the server allows
+  const [avatarOk, setAvatarOk] = useState(false);
+  useEffect(() => {
+    api
+      .avatarProfile()
+      .then(() => setAvatarOk(true))
+      .catch(() => setAvatarOk(false));
+  }, []);
+
+  const createAvatar = async () => {
+    setBusy(true);
+    setError(false);
+    try {
+      const project = await api.createProject(createAvatarDraft(t('start.defaultTitle', { goal: t(goalKey.avatar), date: formatDate(new Date().toISOString()) })));
+      navigate(`/editor/${project.id}`);
+    } catch {
+      setError(true);
+      setBusy(false);
+    }
+  };
 
   const create = async (m: Mood) => {
     if (!goal || !format) return;
@@ -130,6 +151,9 @@ export default function Start() {
               }}
             />
           ))}
+        {step === 0 && avatarOk && (
+          <Option active={false} icon={ScanFace} title={t(goalKey.avatar)} hint={t('start.goalHints.avatar')} onClick={() => void createAvatar()} />
+        )}
         {step === 1 &&
           formats.map((f) => (
             <Option

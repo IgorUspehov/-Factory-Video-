@@ -1,4 +1,4 @@
-import { Clapperboard, Image as ImageIcon, Music, Palette, Scissors, Type, type LucideIcon } from 'lucide-react';
+import { Clapperboard, Image as ImageIcon, Music, Palette, ScanFace, Scissors, Type, type LucideIcon } from 'lucide-react';
 import type { NodeKind } from '../types';
 
 export const nodeIcon: Record<NodeKind, LucideIcon> = {
@@ -8,4 +8,5 @@ export const nodeIcon: Record<NodeKind, LucideIcon> = {
   style: Palette,
   montage: Scissors,
   output: Clapperboard,
+  avatar: ScanFace,
 };

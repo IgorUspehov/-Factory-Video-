@@ -273,6 +273,7 @@ Renderzeiten und Speicher auf Render: **UNKNOWN** (abhängig vom Instanztyp).
 3. Etappe 4: Polar (Credits/Abo, Webhooks), Checkout und Portal statt 501.
 4. Parallaxe und Effekte auf Render messen (0,5 CPU, 512 MB).
 5. Etappe 5: Integration mit Website-SDK (webstudio-sdk-muenchen.com) über API.
+6. Avatar-Block: Benutzeroberfläche ist fertig und mit Attrappen geprüft; offen: Test des echten Ablaufs (Replicate + RunPod, ≈ 0,25 $ je Sprache) mit `AVATAR_OWNER_EMAILS` und allen Schlüsseln auf Render, Speicherspitze des Zusammenbaus 1080×1920 auf Render messen, Aufnahme der Stimmprobe im Browser (optional).
 6. Offen: Schriftauswahl im Frontend auf die 4 Render-Schriften begrenzen oder weitere TTF ergänzen (Entscheidung Eigentümer); Bibliotheks-`bpm`/`duration` durch Messwerte ersetzen (Entscheidung Eigentümer).
 
 ---
@@ -546,6 +547,7 @@ Render times and memory on Render: **UNKNOWN** (depend on the instance type).
 3. Stage 4: Polar (credits/subscription, webhooks), checkout and portal instead of 501.
 4. Measure parallax and effects on Render (0.5 CPU, 512 MB).
 5. Stage 5: integration with Website-SDK (webstudio-sdk-muenchen.com) via API.
+6. Avatar block: the UI is done and tested with fake providers; open: a real end-to-end run (Replicate + RunPod, ≈ $0.25 per language) with `AVATAR_OWNER_EMAILS` and all keys on Render, measure the memory peak of the 1080×1920 composition on Render, recording the voice sample in the browser (optional).
 6. Open: limit the frontend font choice to the 4 render fonts or add more TTFs (owner's decision); replace the library `bpm`/`duration` with measured values (owner's decision).
 
 ---
@@ -819,4 +821,5 @@ VITE_API_URL=http://localhost:8080 npm run dev
 3. Этап 4: Polar (кредиты/подписка, вебхуки), checkout и портал вместо 501.
 4. Замерить параллакс и эффекты на Render (0,5 CPU, 512 МБ).
 5. Этап 5: интеграция с Website-SDK (webstudio-sdk-muenchen.com) через API.
+6. Блок «Аватар»: интерфейс готов и проверен на поддельных провайдерах; осталось: настоящий сквозной прогон (Replicate + RunPod, ≈ $0,25 за язык) с `AVATAR_OWNER_EMAILS` и всеми ключами на Render, замер пика памяти сборки 1080×1920 на Render, запись образца голоса в браузере (по желанию).
 6. Открыто: ограничить выбор шрифтов во фронтенде четырьмя шрифтами рендера или добавить TTF (решение владельца); заменить `bpm`/`duration` библиотеки измеренными значениями (решение владельца).

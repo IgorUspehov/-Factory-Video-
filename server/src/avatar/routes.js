@@ -9,6 +9,11 @@ import { storage } from '../storage/index.js';
 import { avatarKeys } from './queue.js';
 
 export const LANGUAGES = ['ru', 'en', 'de'];
+
+/** Shape check for the `avatar` field of a project (text draft + chosen languages). */
+export function validAvatarDraft(a) {
+  return !!a && typeof a === 'object' && typeof a.text === 'string' && a.text.length <= 1200 && Array.isArray(a.languages) && a.languages.every((l) => LANGUAGES.includes(l));
+}
 export const LIMITS = { textChars: 1200, photoBytes: 12 * 1024 * 1024, voiceBytes: 10 * 1024 * 1024, voiceSeconds: [3, 12], photoMinWidth: 400, photoRatio: [1.3, 1.85], photoMaxWidth: 1024 };
 const PHOTO_EXT = new Set(['.png', '.jpg', '.jpeg', '.webp']);
 const VOICE_EXT = new Set(['.wav', '.mp3', '.m4a', '.ogg', '.webm']);
@@ -16,6 +21,7 @@ const VOICE_EXT = new Set(['.wav', '.mp3', '.m4a', '.ogg', '.webm']);
 const publicJob = (j) => ({
   id: j.id,
   batchId: j.batchId,
+  projectId: j.projectId ?? null,
   language: j.language,
   text: j.text,
   status: j.status,
@@ -49,7 +55,7 @@ export function registerAvatarRoutes(app, { db, auth, withUpload, queue }) {
     return j;
   };
   const needQueue = () => {
-    if (!queue) throw new HttpError(503, 'avatar_not_configured');
+    if (!queue) throw new HttpError(501, 'avatar_not_configured') // not 503: the frontend treats 502/503/504 as "backend down";
   };
 
   const publicProfile = (p) => ({
@@ -129,6 +135,11 @@ export function registerAvatarRoutes(app, { db, auth, withUpload, queue }) {
     if (!text) throw new HttpError(400, 'empty_text');
     if (text.length > LIMITS.textChars) throw new HttpError(400, 'text_too_long');
     if (!languages.length || !languages.every((l) => LANGUAGES.includes(l))) throw new HttpError(400, 'invalid_languages');
+    const projectId = req.body?.projectId == null ? null : String(req.body.projectId);
+    if (projectId) {
+      const project = db.get('projects', projectId);
+      if (!project || project.userId !== req.user.id) throw new HttpError(404, 'not_found');
+    }
     const p = profileOf(req.user.id);
     if (!p?.photoKey || !p?.voiceKey) throw new HttpError(409, 'profile_incomplete');
     const since = Date.now() - 86_400_000;
@@ -137,7 +148,7 @@ export function registerAvatarRoutes(app, { db, auth, withUpload, queue }) {
     const batchId = `avb_${randomUUID()}`;
     const jobs = [];
     for (const language of languages) {
-      const job = { id: `avj_${randomUUID()}`, batchId, userId: req.user.id, language, text, status: 'queued', stage: null, progress: 0, createdAt: new Date().toISOString() };
+      const job = { id: `avj_${randomUUID()}`, batchId, projectId, userId: req.user.id, language, text, status: 'queued', stage: null, progress: 0, createdAt: new Date().toISOString() };
       await db.insert('avatar_jobs', job);
       jobs.push(job);
     }
@@ -146,7 +157,8 @@ export function registerAvatarRoutes(app, { db, auth, withUpload, queue }) {
   }));
 
   app.get('/api/avatar/jobs', ...guard, (req, res) => {
-    const list = db.find('avatar_jobs', (j) => j.userId === req.user.id).sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 50);
+    const only = req.query.projectId ? String(req.query.projectId) : null;
+    const list = db.find('avatar_jobs', (j) => j.userId === req.user.id && (!only || j.projectId === only)).sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 50);
     res.json(list.map(publicJob));
   });
   app.get('/api/avatar/jobs/:id', ...guard, wrap(async (req, res) => res.json(publicJob(ownJob(req)))));

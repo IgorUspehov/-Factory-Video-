@@ -1,5 +1,8 @@
 import type {
   AudioAnalysis,
+  AvatarJob,
+  AvatarLang,
+  AvatarProfile,
   BillingHistoryItem,
   Format,
   LibraryMedia,
@@ -99,6 +102,22 @@ export const api = {
   checkout: (product: 'pro' | 'credits') => request<{ url: string }>('POST', '/api/billing/checkout', { product }),
   portal: () => request<{ url: string }>('GET', '/api/billing/portal'),
   billingHistory: () => request<BillingHistoryItem[]>('GET', '/api/billing/history'),
+
+  // avatar (owner-only block; every call fails with 403 for other accounts)
+  avatarProfile: () => request<AvatarProfile>('GET', '/api/avatar/profile'),
+  avatarUploadPhoto: (file: File) => request<AvatarProfile>('PUT', '/api/avatar/photo', withFile(file)),
+  avatarUploadVoice: (file: File) => request<AvatarProfile>('PUT', '/api/avatar/voice', withFile(file)),
+  /** the photo is private: fetched with the token and shown through an object URL */
+  async avatarPhotoBlob(): Promise<Blob> {
+    const token = tokenStore.get();
+    const res = await fetch(`${BASE}/api/avatar/photo`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+    if (!res.ok) throw new ApiError(res.status, 'photo');
+    return res.blob();
+  },
+  avatarJobs: (projectId: string) => request<AvatarJob[]>('GET', `/api/avatar/jobs${qs({ projectId })}`),
+  avatarCreateJobs: (body: { projectId: string; text: string; languages: AvatarLang[] }) => request<{ jobs: AvatarJob[] }>('POST', '/api/avatar/jobs', body),
+  avatarRetry: (id: string) => request<AvatarJob>('POST', `/api/avatar/jobs/${encodeURIComponent(id)}/retry`),
+  avatarLink: (id: string) => request<{ url: string; expiresAt: string }>('GET', `/api/avatar/jobs/${encodeURIComponent(id)}/link`),
 
   // projects (cached locally so the editor keeps working offline)
   async listProjects(): Promise<Project[]> {

@@ -15,12 +15,12 @@ import { listAudio, listMedia, MOODS, NICHES, ORIENTATIONS } from './library.js'
 import { libraryTracks } from './libraryData.js';
 import { suggest } from './assistant.js';
 import { DIMENSIONS, plannedDuration } from './render/pipeline.js';
-import { registerAvatarRoutes } from './avatar/routes.js';
+import { registerAvatarRoutes, validAvatarDraft } from './avatar/routes.js';
 
 const AUDIO_EXT = new Set(['.mp3', '.wav', '.m4a']);
 const IMAGE_EXT = new Set(['.jpg', '.jpeg', '.png', '.webp']);
 const VIDEO_EXT = new Set(['.mp4', '.mov', '.webm', '.m4v']);
-const PROJECT_FIELDS = ['title', 'goal', 'format', 'mood', 'textMode', 'lengthMode', 'nodes', 'edges', 'audio', 'media', 'lyrics', 'style', 'timeline', 'render'];
+const PROJECT_FIELDS = ['title', 'goal', 'format', 'mood', 'textMode', 'lengthMode', 'nodes', 'edges', 'audio', 'media', 'lyrics', 'style', 'timeline', 'render', 'avatar'];
 
 const pick = (obj, keys) => Object.fromEntries(keys.filter((k) => obj?.[k] !== undefined).map((k) => [k, obj[k]]));
 const publicProject = ({ userId: _u, ...p }) => p;
@@ -34,7 +34,7 @@ export function createApp({ db, queue, avatarQueue = null }) {
     cors({
       origin: (origin, cb) => cb(null, !origin || config.frontendOrigins.includes(origin)),
       allowedHeaders: ['Authorization', 'Content-Type', 'Accept'],
-      methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+      methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     }),
   );
   app.use(express.json({ limit: '15mb' }));
@@ -90,6 +90,7 @@ export function createApp({ db, queue, avatarQueue = null }) {
     const draft = pick(req.body, PROJECT_FIELDS);
     if (typeof draft.title !== 'string' || !DIMENSIONS[draft.format]) throw new HttpError(400, 'invalid_project');
     if (draft.lengthMode !== undefined && !validLengthMode(draft.lengthMode)) throw new HttpError(400, 'invalid_length_mode');
+    if (draft.avatar !== undefined && !validAvatarDraft(draft.avatar)) throw new HttpError(400, 'invalid_avatar');
     const now = new Date().toISOString();
     const project = { ...draft, id: `prj_${randomUUID()}`, userId: req.user.id, createdAt: now, updatedAt: now };
     await db.insert('projects', project);
@@ -101,6 +102,7 @@ export function createApp({ db, queue, avatarQueue = null }) {
     const patch = pick(req.body, PROJECT_FIELDS);
     if (patch.format && !DIMENSIONS[patch.format]) throw new HttpError(400, 'invalid_format');
     if (patch.lengthMode !== undefined && !validLengthMode(patch.lengthMode)) throw new HttpError(400, 'invalid_length_mode');
+    if (patch.avatar !== undefined && !validAvatarDraft(patch.avatar)) throw new HttpError(400, 'invalid_avatar');
     res.json(publicProject(await db.update('projects', p.id, { ...patch, updatedAt: new Date().toISOString() })));
   }));
   app.delete('/api/projects/:id', auth, wrap(async (req, res) => {

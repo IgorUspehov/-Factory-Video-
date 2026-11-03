@@ -114,7 +114,13 @@ try {
   check('too long text -> 400', (await J({ text: 'а'.repeat(1201), languages: ['ru'] })).data.error === 'text_too_long');
   check('no languages -> 400', (await J({ text: 'Привет', languages: [] })).data.error === 'invalid_languages');
   check('unknown language -> 400', (await J({ text: 'Привет', languages: ['ru', 'fr'] })).data.error === 'invalid_languages');
-  const created = await J({ text: 'Привет!  Это   тест.', languages: ['ru', 'en', 'en'] });
+  // project with the avatar draft; jobs bound to it
+  const pr = await api('POST', '/api/projects', { token: owner, json: { title: 'Av', goal: 'avatar', format: '9:16', avatar: { text: 'Привет', languages: ['ru', 'en'] } } });
+  check('project keeps the avatar draft', pr.status === 201 && pr.data.avatar?.languages.join() === 'ru,en');
+  check('invalid avatar draft -> 400', (await api('PATCH', `/api/projects/${pr.data.id}`, { token: owner, json: { avatar: { text: 1, languages: ['xx'] } } })).data.error === 'invalid_avatar');
+  check('avatar draft is updatable', (await api('PATCH', `/api/projects/${pr.data.id}`, { token: owner, json: { avatar: { text: 'Новый', languages: ['de'] } } })).data.avatar.text === 'Новый');
+  check('job for a foreign/unknown project -> 404', (await J({ text: 'x', languages: ['ru'], projectId: 'prj_nope' })).status === 404);
+  const created = await J({ text: 'Привет!  Это   тест.', languages: ['ru', 'en', 'en'], projectId: pr.data.id });
   check('RU+EN -> two jobs (duplicates ignored), text normalised', created.status === 201 && created.data.jobs.length === 2 && created.data.jobs[0].text === 'Привет! Это тест.' && created.data.jobs.every((j) => j.status === 'queued'));
   check('jobs enqueued, same batch', enqueued.length === 2 && created.data.jobs[0].batchId === created.data.jobs[1].batchId);
   const done = await waitDone(owner, created.data.jobs[0].id);
@@ -128,6 +134,7 @@ try {
   const link = await api('GET', `/api/avatar/jobs/${done.id}/link`, { token: owner });
   check('link refresh works', link.status === 200 && (await fetch(link.data.url)).status === 200);
   const list = await api('GET', '/api/avatar/jobs', { token: owner });
+  check('list can be filtered by project', (await api('GET', `/api/avatar/jobs?projectId=${pr.data.id}`, { token: owner })).data.length === 2 && (await api('GET', '/api/avatar/jobs?projectId=prj_other', { token: owner })).data.length === 0 && done.projectId === pr.data.id);
   check('list shows both jobs, newest first', list.data.length === 2 && list.data[0].createdAt >= list.data[1].createdAt);
   check('another account cannot read the job -> 403 (owner guard)', (await api('GET', `/api/avatar/jobs/${done.id}`, { token: other })).status === 403);
   check('unknown job -> 404', (await api('GET', '/api/avatar/jobs/avj_nope', { token: owner })).status === 404);
@@ -146,7 +153,7 @@ try {
   const app2 = createApp({ db, queue: { size: () => 0, enqueue() {}, recover() {} }, avatarQueue: null });
   const s2 = app2.listen(PORT + 1);
   const r2 = await fetch(`http://127.0.0.1:${PORT + 1}/api/avatar/jobs`, { method: 'POST', headers: { Authorization: `Bearer ${owner}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ text: 'x', languages: ['ru'] }) });
-  check('providers missing -> 503 avatar_not_configured', r2.status === 503);
+  check('providers missing -> 501 avatar_not_configured (not 503)', r2.status === 501);
   s2.close();
 } catch (e) {
   failed++;

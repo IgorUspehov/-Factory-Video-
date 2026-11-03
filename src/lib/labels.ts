@@ -9,7 +9,7 @@ export const statusKey: Record<RenderStatus, TKey> = {
   failed: 'render.status.failed',
 };
 
-export const goalKey: Record<Goal, TKey> = { clip: 'goals.clip', promo: 'goals.promo', reels: 'goals.reels' };
+export const goalKey: Record<Goal, TKey> = { clip: 'goals.clip', promo: 'goals.promo', reels: 'goals.reels', avatar: 'goals.avatar' };
 export const moodKey: Record<Mood, TKey> = { calm: 'moods.calm', energetic: 'moods.energetic', premium: 'moods.premium', corporate: 'moods.corporate' };
 export const nicheKey: Record<Niche, TKey> = {
   music: 'niches.music',
@@ -26,6 +26,7 @@ export const nodeKey: Record<NodeKind, TKey> = {
   style: 'blocks.style',
   montage: 'blocks.montage',
   output: 'blocks.output',
+  avatar: 'blocks.avatar',
 };
 export const textModeKey: Record<TextMode, TKey> = { titles: 'text.modes.titles', slogan: 'text.modes.slogan', lyrics: 'text.modes.lyrics' };
 export const transitionKey: Record<Transition, TKey> = {

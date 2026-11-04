@@ -2,7 +2,7 @@
 
 **DE** · [EN](#english) · [RU](#русский)
 
-Stand der Dokumentation / Documentation as of / Документация актуальна на: **2026-09-27**, Version 0.4.1.
+Stand der Dokumentation / Documentation as of / Документация актуальна на: **2026-11-04**, Version 0.4.1 + Avatar-Block (siehe CHANGELOG [Unreleased]).
 
 ---
 
@@ -197,6 +197,7 @@ VITE_API_URL=http://localhost:8080 npm run dev
 
 ### Aktueller Stand
 
+- Avatar-Block (Stand 2026-11-04, nur für `AVATAR_OWNER_EMAILS`): läuft auf Render (R2-Speicher mit DB-Spiegelung, Provider, Warteschlange, API, Oberfläche; Commits `2427fcd`–`54177ec`). **Das erste RU-Video auf Render ist fertig** (Bericht des Eigentümers). Dabei zeigte sich die Replicate-Drosselung (429, ≈ 6 Vorhersagen/Minute bei wenig Guthaben), behoben in `54177ec`. Gemessen: InfiniteTalk 0,25 $ je Anfrage unabhängig von der Länge (8 s und 38,8 s), Laufzeit ≈ 119 s (8 s) bzw. ≈ 331 s (38,8 s), die Bildgröße folgt dem Foto (1024×1536 → 512×768); Chatterbox höchstens 300 Zeichen je Anfrage, 3,6–8 s je Teil; Übersetzung (Claude Haiku) ≈ 1 s. Tests: Provider 27/27, Warteschlange 14/14, API 38/38, Browser 24/24, Smoke-Test 165/165. Ein Video von 60 s auf Render und die Speicherspitze des Zusammenbaus 1080×1920 auf Render: **UNKNOWN** (nicht gemessen).
 - 0.4.0 (2026-09-27): 2.5D-Parallaxe (Tiefenmodell im Browser) und Effekte im Takt. Lokal geprüft: `npx tsc --noEmit`, `npm run build`; `npm run smoke` (165/165; neu: Upload der Tiefenkarte, Render mit Tiefenkarten, alle Voreinstellungen, Fallback ohne Tiefenkarte, fremde Tiefenkarte, Messungen 30 s / 3 min); Headless Chrome mit **echtem Modell** im Browser (11/11): 3 Fotos → Tiefe 3 von 3, Voreinstellung „Energisch“, Track 1:50 → MP4 = Track, keine JS-Fehler. Bilder aus dem MP4: `docs/screenshots/0.4.0/`. Auf Render nicht geprüft: **UNKNOWN**.
 - 0.3.0 (2026-09-27): Editor-Überarbeitung nach dem ersten Test des Eigentümers in Produktion. Lokal geprüft: `npx tsc --noEmit`, `npm run build`; `npm run smoke` (99/99); Headless Chrome gegen lokales Backend mit Pexels-Attrappe (`server/scripts/fake-pexels.mjs`): 21/21 — u. a. Musikvideo mit 1:50-Track → MP4 110,03 s = Track, 3 gezielt gewählte Fotos landen genau so im Projekt (auch wenn eine ältere, langsamere Suche danach antwortet), Suche „singer stage“ liefert Ergebnisse, Nachladen beim Scrollen, Player öffnet sich nach dem Rendern selbst, Panel 475 px (33 % von 1440) und verstellbar, mobil Bottom-Sheet 85 %, keine JS-Fehler. Screenshots: `docs/screenshots/0.3.0/` (Bibliothek dort mit der Pexels-Attrappe, daher „Fixture Photographer“). Gegen die echte Pexels-API nicht geprüft (kein Schlüssel verfügbar): **UNKNOWN**.
 - Etappe 0 ✔, Etappe 1 ✔, Etappe 2 (Backend-MVP) ✔; beide Dienste laufen auf Render (Frontend und API).
@@ -222,6 +223,7 @@ Renderzeiten und Speicher auf Render: **UNKNOWN** (abhängig vom Instanztyp).
 
 ### Getroffene Entscheidungen
 
+- Avatar (Eigentümer, 2026-11-04): **RU wird mit der eigenen, echten Stimme vertont** — der Eigentümer lädt eine eigene Aufnahme hoch (Grenze 60 s) statt des Chatterbox-Klons; **EN und DE bleiben bei Chatterbox** (geklonte Stimme, Übersetzung durch Claude Haiku). **Untertitel größer und fetter:** 2–4 Wörter je Zeile. Zuvor festgelegt (2026-11-03): nur für `AVATAR_OWNER_EMAILS`, Speicher in R2, Zuschnitt 9:16 (Mittelbeschnitt), Übersetzung Claude Haiku, kein Webhook.
 - FFmpeg nativ über `ffmpeg-static` + `ffprobe-static`, ohne Docker (Eigentümer).
 - **Beat-Erkennung: music-tempo** — reines JavaScript ohne native Abhängigkeiten oder Web-Audio-API (läuft in Node), MIT-Lizenz, liefert Tempo **und** Beat-Zeitpunkte (Beat-Tracking nach Dixons BeatRoot), was für Schnitte im Takt nötig ist. Andere JS-Bibliotheken (z. B. web-audio-beat-detector, realtime-bpm-analyzer) setzen die Web-Audio-API des Browsers voraus oder liefern nur BPM. Parameter (22,05 kHz, Hop 221, FFT 1024) auf synthetischen Tracks 75–160 BPM gewählt; Tempo > 160 BPM wird halbiert (energiereichere Beat-Phase bleibt). Analyse in einem kurzlebigen Kindprozess (seit 0.4.0; vorher Worker-Thread, dessen Speicher im Serverprozess blieb), eine gleichzeitig, Beats für die ersten 300 s.
 - Text über libass (ASS-Untertitel) statt `drawtext`: der `ffmpeg-static`-Build 7.0.2 enthält kein `drawtext` (benötigt libharfbuzz), aber `ass`. Abweichung von der Vorgabe „drawtext“.
@@ -245,7 +247,7 @@ Renderzeiten und Speicher auf Render: **UNKNOWN** (abhängig vom Instanztyp).
 
 ### Einschränkungen
 
-- **DATA_DIR geht bei jedem Redeploy auf Render verloren** (kein persistenter Datenträger). Bis Etappe 3 (R2) akzeptiert: Nutzer, Projekte, Uploads und Renders verschwinden dann; ausgegebene JWT werden ungültig, falls `JWT_SECRET` neu generiert wird.
+- **DATA_DIR geht bei jedem Redeploy auf Render verloren** (kein persistenter Datenträger). Bis Etappe 3 (R2) akzeptiert: Nutzer, Projekte, Uploads und Renders verschwinden dann; ausgegebene JWT werden ungültig, falls `JWT_SECRET` neu generiert wird. **Seit 2026-11-03 behoben, wenn die `R2_*`-Variablen gesetzt sind** (Dateien in R2, JSON-DB wird gespiegelt); ohne R2 gilt die Einschränkung weiter.
 - Nur eine Serverinstanz möglich (JSON-Dateien + Warteschlange im Prozess).
 - Das Frontend bietet 12 Schriften an, der Render kennt 4 (Inter, Montserrat, Bebas Neue, Playfair Display); alle anderen werden im Video als Inter gerendert — im Stil-Panel mit „*“ markiert. Bebas Neue hat keine kyrillischen Glyphen → kyrillische Zeilen in Inter.
 - Qualität der mehrsprachigen Pexels-Suche (DE/RU) mit echtem Schlüssel: **UNKNOWN**. Ohne Schlüssel durchsucht die Suche nur Titel, Stimmung und Nische der statischen Liste.
@@ -269,12 +271,15 @@ Renderzeiten und Speicher auf Render: **UNKNOWN** (abhängig vom Instanztyp).
 ### Nächste Schritte
 
 1. Auf Render: prüfen, ob `PEXELS_API_KEY` gesetzt ist, und die Pexels-Suche (DE/RU) mit echtem Schlüssel testen; Render-Zeiten und Speicher dort messen.
-2. Etappe 3: Videos und Uploads in Cloudflare R2 (R2-Treiber für `server/src/storage`), Links, Verlauf; Datenbank statt JSON-Dateien (Wahl **UNKNOWN**).
+2. Etappe 3: Videos und Uploads in Cloudflare R2 (R2-Treiber für `server/src/storage`), Links, Verlauf; Datenbank statt JSON-Dateien (Wahl **UNKNOWN**). — **Dateien in R2 und Spiegelung der JSON-DB erledigt (2026-11-03)**; offen: Links/Verlauf, echte Datenbank.
 3. Etappe 4: Polar (Credits/Abo, Webhooks), Checkout und Portal statt 501.
 4. Parallaxe und Effekte auf Render messen (0,5 CPU, 512 MB).
 5. Etappe 5: Integration mit Website-SDK (webstudio-sdk-muenchen.com) über API.
-6. Avatar-Block: Benutzeroberfläche ist fertig und mit Attrappen geprüft; offen: Test des echten Ablaufs (Replicate + RunPod, ≈ 0,25 $ je Sprache) mit `AVATAR_OWNER_EMAILS` und allen Schlüsseln auf Render, Speicherspitze des Zusammenbaus 1080×1920 auf Render messen, Aufnahme der Stimmprobe im Browser (optional).
-6. Offen: Schriftauswahl im Frontend auf die 4 Render-Schriften begrenzen oder weitere TTF ergänzen (Entscheidung Eigentümer); Bibliotheks-`bpm`/`duration` durch Messwerte ersetzen (Entscheidung Eigentümer).
+6. Avatar, RU mit eigener Stimme: Feld zum Hochladen einer eigenen Aufnahme (höchstens 60 s) für RU-Videos; die Stimmsynthese für RU entfällt. Offen für den Eigentümer: wie die Untertitel zur eigenen Aufnahme getaktet werden (proportional zur Länge oder per Spracherkennung) — **UNKNOWN**.
+7. Avatar, Untertitel: größer und fett, 2–4 Wörter je Zeile (`server/src/avatar/subtitles.js`, `text.js`; Inter 700 liegt in `server/fonts`).
+8. Avatar, Video von 60 s auf Render prüfen (512 MB): Speicherspitze des Zusammenbaus 1080×1920, Gesamtzeit, Länge/Preis bei InfiniteTalk — gemessen nur bis 38,8 s ($0,25), maximale Audiolänge **UNKNOWN**.
+9. Avatar, offen: Replicate-Konto mit mehr Guthaben (sonst 429-Drosselung, Videos dauern länger); die Abbuchung bei RunPod von 0,25 $ nach 23:15 am 2026-11-03 ist keinem Auftrag zugeordnet — in der RunPod-Konsole prüfen (**UNKNOWN**); Aufnahme der Stimme im Browser (optional).
+10. Offen: Schriftauswahl im Frontend auf die 4 Render-Schriften begrenzen oder weitere TTF ergänzen (Entscheidung Eigentümer); Bibliotheks-`bpm`/`duration` durch Messwerte ersetzen (Entscheidung Eigentümer).
 
 ---
 
@@ -471,6 +476,7 @@ VITE_API_URL=http://localhost:8080 npm run dev
 
 ### Current state
 
+- Avatar block (state 2026-11-04, only for `AVATAR_OWNER_EMAILS`): running on Render (R2 storage with DB mirror, providers, queue, API, UI; commits `2427fcd`–`54177ec`). **The first RU reel on Render is ready** (owner's report). It exposed Replicate's throttling (429, ≈ 6 predictions/minute with little credit), fixed in `54177ec`. Measured: InfiniteTalk $0.25 per request regardless of length (8 s and 38.8 s), run time ≈ 119 s (8 s) and ≈ 331 s (38.8 s), the frame size follows the photo (1024×1536 → 512×768); Chatterbox at most 300 characters per request, 3.6–8 s per chunk; translation (Claude Haiku) ≈ 1 s. Tests: providers 27/27, queue 14/14, API 38/38, browser 24/24, smoke test 165/165. A 60 s video on Render and the memory peak of the 1080×1920 composition on Render: **UNKNOWN** (not measured).
 - 0.4.0 (2026-09-27): 2.5D parallax (depth model in the browser) and beat effects. Verified locally: `npx tsc --noEmit`, `npm run build`; `npm run smoke` (165/165; new: depth map upload, render with depth maps, all presets, fallback without depth map, foreign depth map, measurements 30 s / 3 min); headless Chrome with the **real model** in the browser (11/11): 3 photos → depth 3 of 3, preset "Energetic", 1:50 track → MP4 = track, no JS errors. Frames from the MP4: `docs/screenshots/0.4.0/`. Not verified on Render: **UNKNOWN**.
 - 0.3.0 (2026-09-27): editor rework after the owner's first test in production. Verified locally: `npx tsc --noEmit`, `npm run build`; `npm run smoke` (99/99); headless Chrome against the local backend with a Pexels stand-in (`server/scripts/fake-pexels.mjs`): 21/21 — incl. music video with a 1:50 track → MP4 of 110.03 s = track, 3 specifically picked photos end up exactly in the project (even when an older, slower search answers afterwards), search "singer stage" returns results, loading more on scroll, the player opens by itself after rendering, panel 475 px (33 % of 1440) and resizable, mobile bottom sheet 85 %, no JS errors. Screenshots: `docs/screenshots/0.3.0/` (library shown with the Pexels stand-in, hence "Fixture Photographer"). Not verified against the real Pexels API (no key available): **UNKNOWN**.
 - Stage 0 ✔, stage 1 ✔, stage 2 (backend MVP) ✔; both services run on Render (frontend and API).
@@ -496,6 +502,7 @@ Render times and memory on Render: **UNKNOWN** (depend on the instance type).
 
 ### Decisions made
 
+- Avatar (owner, 2026-11-04): **RU is voiced with the owner's own live voice** — the owner uploads their own recording (limit 60 s) instead of the Chatterbox clone; **EN and DE stay on Chatterbox** (cloned voice, translation by Claude Haiku). **Subtitles larger and bold:** 2–4 words per line. Decided earlier (2026-11-03): only for `AVATAR_OWNER_EMAILS`, storage in R2, 9:16 crop (centre), translation by Claude Haiku, no webhook.
 - FFmpeg natively via `ffmpeg-static` + `ffprobe-static`, no Docker (owner).
 - **Beat detection: music-tempo** — pure JavaScript without native dependencies or the Web Audio API (runs in Node), MIT licence, returns the tempo **and** beat timestamps (beat tracking after Dixon's BeatRoot), which beat-synced cuts need. Other JS libraries (e.g. web-audio-beat-detector, realtime-bpm-analyzer) require the browser's Web Audio API or return BPM only. Parameters (22.05 kHz, hop 221, FFT 1024) chosen on synthetic 75–160 BPM tracks; tempos > 160 BPM are halved (the beat phase with more energy is kept). Analysis in a short-lived child process (since 0.4.0; previously a worker thread whose memory stayed in the server process), one at a time, beats for the first 300 s.
 - Text via libass (ASS subtitles) instead of `drawtext`: the `ffmpeg-static` 7.0.2 build has no `drawtext` (it needs libharfbuzz) but has `ass`. Deviation from the "drawtext" requirement.
@@ -519,7 +526,7 @@ Render times and memory on Render: **UNKNOWN** (depend on the instance type).
 
 ### Limitations
 
-- **DATA_DIR is lost on every redeploy on Render** (no persistent disk). Accepted until stage 3 (R2): users, projects, uploads and renders disappear; issued JWTs become invalid if `JWT_SECRET` is regenerated.
+- **DATA_DIR is lost on every redeploy on Render** (no persistent disk). Accepted until stage 3 (R2): users, projects, uploads and renders disappear; issued JWTs become invalid if `JWT_SECRET` is regenerated. **Fixed since 2026-11-03 when the `R2_*` variables are set** (files in R2, the JSON DB is mirrored); without R2 the limitation still applies.
 - Only one server instance is possible (JSON files + in-process queue).
 - The frontend offers 12 fonts, the renderer knows 4 (Inter, Montserrat, Bebas Neue, Playfair Display); all others are rendered as Inter in the video — marked with "*" in the Style panel. Bebas Neue has no Cyrillic glyphs → Cyrillic lines use Inter.
 - Quality of multilingual Pexels search (DE/RU) with a real key: **UNKNOWN**. Without a key the search only matches title, mood and niche of the static list.
@@ -543,12 +550,15 @@ Render times and memory on Render: **UNKNOWN** (depend on the instance type).
 ### Next steps
 
 1. On Render: check whether `PEXELS_API_KEY` is set and test the Pexels search (DE/RU) with a real key; measure render time and memory there.
-2. Stage 3: videos and uploads in Cloudflare R2 (R2 driver for `server/src/storage`), links, history; a database instead of JSON files (choice **UNKNOWN**).
+2. Stage 3: videos and uploads in Cloudflare R2 (R2 driver for `server/src/storage`), links, history; a database instead of JSON files (choice **UNKNOWN**). — **files in R2 and the JSON DB mirror are done (2026-11-03)**; open: links/history, a real database.
 3. Stage 4: Polar (credits/subscription, webhooks), checkout and portal instead of 501.
 4. Measure parallax and effects on Render (0.5 CPU, 512 MB).
 5. Stage 5: integration with Website-SDK (webstudio-sdk-muenchen.com) via API.
-6. Avatar block: the UI is done and tested with fake providers; open: a real end-to-end run (Replicate + RunPod, ≈ $0.25 per language) with `AVATAR_OWNER_EMAILS` and all keys on Render, measure the memory peak of the 1080×1920 composition on Render, recording the voice sample in the browser (optional).
-6. Open: limit the frontend font choice to the 4 render fonts or add more TTFs (owner's decision); replace the library `bpm`/`duration` with measured values (owner's decision).
+6. Avatar, RU with the own voice: a field to upload an own recording (at most 60 s) for RU videos; voice synthesis for RU is dropped. Open for the owner: how the subtitles are timed against the own recording (proportional to the length or by speech recognition) — **UNKNOWN**.
+7. Avatar, subtitles: larger and bold, 2–4 words per line (`server/src/avatar/subtitles.js`, `text.js`; Inter 700 is in `server/fonts`).
+8. Avatar, check a 60 s video on Render (512 MB): memory peak of the 1080×1920 composition, total time, InfiniteTalk length/price — measured only up to 38.8 s ($0.25), maximum audio length **UNKNOWN**.
+9. Avatar, open: a Replicate account with more credit (otherwise 429 throttling and slower videos); the RunPod charge of $0.25 after 23:15 on 2026-11-03 is not matched to a job — check in the RunPod console (**UNKNOWN**); recording the voice in the browser (optional).
+10. Open: limit the frontend font choice to the 4 render fonts or add more TTFs (owner's decision); replace the library `bpm`/`duration` with measured values (owner's decision).
 
 ---
 
@@ -745,6 +755,7 @@ VITE_API_URL=http://localhost:8080 npm run dev
 
 ### Текущее состояние
 
+- Блок «Аватар» (состояние на 2026-11-04, только для `AVATAR_OWNER_EMAILS`): работает на Render (хранилище R2 с зеркалом базы, провайдеры, очередь, API, интерфейс; коммиты `2427fcd`–`54177ec`). **Первый ролик RU на Render готов** (со слов владельца). При этом проявилось ограничение Replicate (429, ≈ 6 предсказаний в минуту при малом балансе), исправлено в `54177ec`. Замеры: InfiniteTalk $0,25 за запрос независимо от длины (8 с и 38,8 с), время ≈ 119 с (8 с) и ≈ 331 с (38,8 с), размер кадра следует за фото (1024×1536 → 512×768); Chatterbox не более 300 символов на запрос, 3,6–8 с на часть; перевод (Claude Haiku) ≈ 1 с. Тесты: провайдеры 27/27, очередь 14/14, API 38/38, браузер 24/24, smoke-тест 165/165. Ролик в 60 с на Render и пик памяти сборки 1080×1920 на Render: **UNKNOWN** (не измерялось).
 - 0.4.0 (2026-09-27): 2.5D-параллакс (модель глубины в браузере) и эффекты под бит. Проверено локально: `npx tsc --noEmit`, `npm run build`; `npm run smoke` (165/165; новое: загрузка карты глубины, рендер с картами глубины, все пресеты, фолбэк без карты, чужая карта, замеры 30 с / 3 мин); headless Chrome с **настоящей моделью** в браузере (11/11): 3 фото → объём 3 из 3, пресет «Энергично», трек 1:50 → MP4 = треку, нет JS-ошибок. Кадры из MP4: `docs/screenshots/0.4.0/`. На Render не проверено: **UNKNOWN**.
 - 0.3.0 (2026-09-27): переработка редактора по итогам первого теста владельца на проде. Проверено локально: `npx tsc --noEmit`, `npm run build`; `npm run smoke` (99/99); headless Chrome против локального бэкенда с имитацией Pexels (`server/scripts/fake-pexels.mjs`): 21/21 — в том числе клип с треком 1:50 → MP4 110,03 с = трек, 3 конкретно выбранных фото попадают в проект именно они (даже если после них отвечает более старый медленный поиск), поиск «singer stage» возвращает результаты, подгрузка при прокрутке, плеер открывается сам после рендера, панель 475 px (33 % от 1440) и тянется, на мобильном шторка 85 %, нет JS-ошибок. Скриншоты: `docs/screenshots/0.3.0/` (медиатека снята с имитацией Pexels, поэтому «Fixture Photographer»). Против настоящего Pexels API не проверено (ключа нет): **UNKNOWN**.
 - Этап 0 ✔, этап 1 ✔, этап 2 (бэкенд MVP) ✔; оба сервиса работают на Render (фронтенд и API).
@@ -770,6 +781,7 @@ VITE_API_URL=http://localhost:8080 npm run dev
 
 ### Принятые решения
 
+- Аватар (владелец, 2026-11-04): **RU озвучивается собственным живым голосом** — владелец загружает свою запись (лимит 60 с) вместо клона Chatterbox; **EN и DE остаются на Chatterbox** (клонированный голос, перевод Claude Haiku). **Субтитры крупнее и жирнее:** 2–4 слова в строке. Ранее решено (2026-11-03): только для `AVATAR_OWNER_EMAILS`, хранилище R2, кроп 9:16 (по центру), перевод Claude Haiku, без webhook.
 - FFmpeg нативно через `ffmpeg-static` + `ffprobe-static`, без Docker (владелец).
 - **Определение бита: music-tempo** — чистый JavaScript без нативных зависимостей и без Web Audio API (работает в Node), лицензия MIT, возвращает темп **и** время каждого бита (beat tracking по BeatRoot Диксона), что нужно для склеек под бит. Другие JS-библиотеки (например, web-audio-beat-detector, realtime-bpm-analyzer) требуют Web Audio API браузера или дают только BPM. Параметры (22,05 кГц, шаг 221, FFT 1024) подобраны на синтетических треках 75–160 BPM; темп > 160 BPM делится пополам (остаётся фаза битов с большей энергией). Анализ в короткоживущем дочернем процессе (с 0.4.0; раньше worker-поток, память которого оставалась в процессе сервера), по одному, биты — за первые 300 с.
 - Текст через libass (субтитры ASS) вместо `drawtext`: в сборке `ffmpeg-static` 7.0.2 нет `drawtext` (нужна libharfbuzz), но есть `ass`. Отступление от требования «drawtext».
@@ -793,7 +805,7 @@ VITE_API_URL=http://localhost:8080 npm run dev
 
 ### Ограничения
 
-- **DATA_DIR теряется при каждом редеплое на Render** (нет постоянного диска). До этапа 3 (R2) это допустимо: пользователи, проекты, загрузки и рендеры пропадают; выданные JWT становятся недействительными, если `JWT_SECRET` сгенерирован заново.
+- **DATA_DIR теряется при каждом редеплое на Render** (нет постоянного диска). До этапа 3 (R2) это допустимо: пользователи, проекты, загрузки и рендеры пропадают; выданные JWT становятся недействительными, если `JWT_SECRET` сгенерирован заново. **Исправлено с 2026-11-03, если заданы переменные `R2_*`** (файлы в R2, JSON-база зеркалируется); без R2 ограничение остаётся.
 - Возможен только один инстанс сервера (JSON-файлы + очередь в процессе).
 - Фронтенд предлагает 12 шрифтов, рендер знает 4 (Inter, Montserrat, Bebas Neue, Playfair Display); остальные в видео заменяются на Inter — в панели «Стиль» они отмечены «*». В Bebas Neue нет кириллицы → кириллические строки набираются Inter.
 - Качество многоязычного поиска Pexels (DE/RU) с настоящим ключом — **UNKNOWN**. Без ключа поиск ищет только по названию, настроению и нише статического списка.
@@ -817,9 +829,12 @@ VITE_API_URL=http://localhost:8080 npm run dev
 ### Следующие шаги
 
 1. На Render: проверить, задан ли `PEXELS_API_KEY`, и протестировать поиск Pexels (DE/RU) с настоящим ключом; измерить время рендера и память там.
-2. Этап 3: видео и загрузки в Cloudflare R2 (драйвер R2 для `server/src/storage`), ссылки, история; БД вместо JSON-файлов (выбор **UNKNOWN**).
+2. Этап 3: видео и загрузки в Cloudflare R2 (драйвер R2 для `server/src/storage`), ссылки, история; БД вместо JSON-файлов (выбор **UNKNOWN**). — **файлы в R2 и зеркало JSON-базы готовы (2026-11-03)**; осталось: ссылки/история, настоящая база данных.
 3. Этап 4: Polar (кредиты/подписка, вебхуки), checkout и портал вместо 501.
 4. Замерить параллакс и эффекты на Render (0,5 CPU, 512 МБ).
 5. Этап 5: интеграция с Website-SDK (webstudio-sdk-muenchen.com) через API.
-6. Блок «Аватар»: интерфейс готов и проверен на поддельных провайдерах; осталось: настоящий сквозной прогон (Replicate + RunPod, ≈ $0,25 за язык) с `AVATAR_OWNER_EMAILS` и всеми ключами на Render, замер пика памяти сборки 1080×1920 на Render, запись образца голоса в браузере (по желанию).
-6. Открыто: ограничить выбор шрифтов во фронтенде четырьмя шрифтами рендера или добавить TTF (решение владельца); заменить `bpm`/`duration` библиотеки измеренными значениями (решение владельца).
+6. Аватар, RU своим голосом: поле для загрузки своей записи (не более 60 с) для видео RU; синтез голоса для RU убирается. Открыто для владельца: как привязывать субтитры к своей записи (пропорционально длине или распознаванием речи) — **UNKNOWN**.
+7. Аватар, субтитры: крупнее и жирнее, 2–4 слова в строке (`server/src/avatar/subtitles.js`, `text.js`; Inter 700 лежит в `server/fonts`).
+8. Аватар, проверить ролик в 60 с на Render (512 МБ): пик памяти сборки 1080×1920, общее время, длина/цена у InfiniteTalk — измерено только до 38,8 с ($0,25), максимальная длина аудио **UNKNOWN**.
+9. Аватар, открыто: аккаунт Replicate с большим балансом (иначе ограничение 429 и более долгие ролики); списание $0,25 в RunPod после 23:15 2026-11-03 не сопоставлено с заданием — проверить в консоли RunPod (**UNKNOWN**); запись голоса в браузере (по желанию).
+10. Открыто: ограничить выбор шрифтов во фронтенде четырьмя шрифтами рендера или добавить TTF (решение владельца); заменить `bpm`/`duration` библиотеки измеренными значениями (решение владельца).

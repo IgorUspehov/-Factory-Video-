@@ -107,6 +107,7 @@ export const api = {
   avatarProfile: () => request<AvatarProfile>('GET', '/api/avatar/profile'),
   avatarUploadPhoto: (file: File) => request<AvatarProfile>('PUT', '/api/avatar/photo', withFile(file)),
   avatarUploadVoice: (file: File) => request<AvatarProfile>('PUT', '/api/avatar/voice', withFile(file)),
+  avatarUploadRecording: (file: File) => request<{ id: string; duration: number }>('PUT', '/api/avatar/recording', withFile(file)),
   /** the photo is private: fetched with the token and shown through an object URL */
   async avatarPhotoBlob(): Promise<Blob> {
     const token = tokenStore.get();
@@ -115,7 +116,7 @@ export const api = {
     return res.blob();
   },
   avatarJobs: (projectId: string) => request<AvatarJob[]>('GET', `/api/avatar/jobs${qs({ projectId })}`),
-  avatarCreateJobs: (body: { projectId: string; text: string; languages: AvatarLang[] }) => request<{ jobs: AvatarJob[] }>('POST', '/api/avatar/jobs', body),
+  avatarCreateJobs: (body: { projectId: string; text: string; languages: AvatarLang[]; recordingId?: string }) => request<{ jobs: AvatarJob[] }>('POST', '/api/avatar/jobs', body),
   avatarRetry: (id: string) => request<AvatarJob>('POST', `/api/avatar/jobs/${encodeURIComponent(id)}/retry`),
   avatarLink: (id: string) => request<{ url: string; expiresAt: string }>('GET', `/api/avatar/jobs/${encodeURIComponent(id)}/link`),
 

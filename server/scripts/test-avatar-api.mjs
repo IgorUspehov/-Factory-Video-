@@ -9,7 +9,7 @@ import { promisify } from 'node:util';
 const sh = promisify(execFile);
 const root = await mkdtemp(path.join(os.tmpdir(), 'avapi-'));
 const PORT = 8097;
-Object.assign(process.env, { DATA_DIR: path.join(root, 'data'), JWT_SECRET: 'test', PUBLIC_URL: `http://127.0.0.1:${PORT}`, AVATAR_OWNER_EMAILS: 'Owner@Example.com', AVATAR_DAILY_LIMIT: '4' });
+Object.assign(process.env, { DATA_DIR: path.join(root, 'data'), JWT_SECRET: 'test', PUBLIC_URL: `http://127.0.0.1:${PORT}`, AVATAR_OWNER_EMAILS: 'Owner@Example.com, owner2@example.com', AVATAR_DAILY_LIMIT: '4' });
 const { createApp } = await import('../src/app.js');
 const { createDb } = await import('../src/db.js');
 const { storage } = await import('../src/storage/index.js');
@@ -75,13 +75,13 @@ try {
 
   // ---- access: owner only
   check('no token -> 401', (await api('GET', '/api/avatar/profile')).status === 401);
-  const routes = [['GET', '/api/avatar/profile'], ['GET', '/api/avatar/photo'], ['GET', '/api/avatar/jobs'], ['POST', '/api/avatar/jobs'], ['PUT', '/api/avatar/photo'], ['PUT', '/api/avatar/voice']];
+  const routes = [['GET', '/api/avatar/profile'], ['GET', '/api/avatar/photo'], ['GET', '/api/avatar/jobs'], ['POST', '/api/avatar/jobs'], ['PUT', '/api/avatar/photo'], ['PUT', '/api/avatar/voice'], ['PUT', '/api/avatar/recording']];
   const denied = await Promise.all(routes.map(([m, p]) => api(m, p, { token: other, json: m === 'POST' ? { text: 'x', languages: ['ru'] } : undefined })));
   check('other account -> 403 on every route', denied.every((r) => r.status === 403), denied.map((r) => r.status).join());
   check('owner e-mail matches case-insensitively', (await api('GET', '/api/avatar/profile', { token: owner })).status === 200);
   const p0 = (await api('GET', '/api/avatar/profile', { token: owner })).data;
   check('empty profile: not ready, configured', p0.ready === false && p0.configured === true && p0.limits.dailyLimit === 4);
-  check('job without profile -> 409', (await api('POST', '/api/avatar/jobs', { token: owner, json: { text: 'Привет', languages: ['ru'] } })).data.error === 'profile_incomplete');
+  check('job without profile -> 409', (await api('POST', '/api/avatar/jobs', { token: owner, json: { text: 'Привет', languages: ['en'] } })).data.error === 'profile_incomplete');
 
   // ---- photo
   const square = await mk('sq.png', ['-f', 'lavfi', '-i', 'testsrc2=s=1024x1024:d=1', '-frames:v', '1']);
@@ -108,8 +108,34 @@ try {
   const stored = await probe(await storage.localPath(`avatar/${(await api('GET', '/api/me', { token: owner })).data.id}/voice.wav`));
   check('voice stored as mono WAV', stored.audio?.codec === 'pcm_s16le');
 
+  // ---- own recording (Russian)
+  const wavSil = await mk('rec-sil.wav', ['-f', 'lavfi', '-i', 'anullsrc=r=44100:cl=mono', '-f', 'lavfi', '-i', 'sine=frequency=300:sample_rate=44100:duration=8', '-filter_complex', '[0:a]atrim=duration=1,asplit=2[s1][s2];[s1][1:a][s2]concat=n=3:v=0:a=1[a]', '-map', '[a]']);
+  const rec1 = await mk('rec1s.wav', ['-f', 'lavfi', '-i', 'sine=frequency=300:duration=1']);
+  const rec61 = await mk('rec61s.mp3', ['-f', 'lavfi', '-i', 'sine=frequency=300:duration=61', '-c:a', 'libmp3lame', '-b:a', '32k']);
+  const rec60 = await mk('rec60s.mp3', ['-f', 'lavfi', '-i', 'sine=frequency=300:duration=60', '-c:a', 'libmp3lame', '-b:a', '32k']);
+  check('recording: wrong type -> unsupported_type', (await api('PUT', '/api/avatar/recording', { token: owner, form: await formOf(wavSil, 'rec.gif') })).data.error === 'unsupported_type');
+  check('recording: 1 s -> recording_duration', (await api('PUT', '/api/avatar/recording', { token: owner, form: await formOf(rec1) })).data.error === 'recording_duration');
+  check('recording: 61 s -> recording_duration', (await api('PUT', '/api/avatar/recording', { token: owner, form: await formOf(rec61) })).data.error === 'recording_duration');
+  const r60 = await api('PUT', '/api/avatar/recording', { token: owner, form: await formOf(rec60) });
+  check('recording: exactly 60 s accepted', r60.status === 201 && /^avr_/.test(r60.data.id) && Math.abs(r60.data.duration - 60) < 0.5, JSON.stringify(r60.data));
+  const rOk = await api('PUT', '/api/avatar/recording', { token: owner, form: await formOf(wavSil) });
+  check('recording: 10 s accepted and stored as mono 32 kHz WAV', rOk.status === 201 && Math.abs(rOk.data.duration - 10) < 0.3);
+  const recInfo = await probe(await storage.localPath(`avatar/${uid}/${rOk.data.id}.wav`));
+  check('stored recording is a WAV, not served under /files', recInfo.audio?.codec === 'pcm_s16le' && (await fetch(`${BASE}/files/avatar/${uid}/${rOk.data.id}.wav`)).status === 404);
+  const recId = rOk.data.id;
+
   // ---- jobs
-  const J = (json) => api('POST', '/api/avatar/jobs', { token: owner, json });
+  const J = (json) => api('POST', '/api/avatar/jobs', { token: owner, json: { recordingId: recId, ...json } });
+  check('RU without a recording -> 400 recording_required', (await api('POST', '/api/avatar/jobs', { token: owner, json: { text: 'Привет', languages: ['ru'] } })).data.error === 'recording_required');
+  check('RU with an unknown recording -> 400 recording_required', (await api('POST', '/api/avatar/jobs', { token: owner, json: { text: 'Привет', languages: ['ru'], recordingId: 'avr_nope' } })).data.error === 'recording_required');
+  // a second owner account: photo only, no voice sample
+  const owner2 = (await api('POST', '/api/auth/register', { json: { email: 'owner2@example.com', password: 'secret123' } })).data.token;
+  await api('PUT', '/api/avatar/photo', { token: owner2, form: await formOf(portrait) });
+  const rec2 = (await api('PUT', '/api/avatar/recording', { token: owner2, form: await formOf(wavSil) })).data;
+  check('someone else\'s recording cannot be used', (await api('POST', '/api/avatar/jobs', { token: owner2, json: { text: 'Привет', languages: ['ru'], recordingId: recId } })).data.error === 'recording_required');
+  const ruOnly = await api('POST', '/api/avatar/jobs', { token: owner2, json: { text: 'Привет', languages: ['ru'], recordingId: rec2.id } });
+  check('RU works with photo + own recording, no voice sample needed', ruOnly.status === 201 && ruOnly.data.jobs[0].language === 'ru');
+  check('EN without a voice sample -> 409 profile_incomplete', (await api('POST', '/api/avatar/jobs', { token: owner2, json: { text: 'Привет', languages: ['en'] } })).data.error === 'profile_incomplete');
   check('empty text -> 400', (await J({ text: '  ', languages: ['ru'] })).data.error === 'empty_text');
   check('too long text -> 400', (await J({ text: 'а'.repeat(1201), languages: ['ru'] })).data.error === 'text_too_long');
   check('no languages -> 400', (await J({ text: 'Привет', languages: [] })).data.error === 'invalid_languages');
@@ -122,7 +148,8 @@ try {
   check('job for a foreign/unknown project -> 404', (await J({ text: 'x', languages: ['ru'], projectId: 'prj_nope' })).status === 404);
   const created = await J({ text: 'Привет!  Это   тест.', languages: ['ru', 'en', 'en'], projectId: pr.data.id });
   check('RU+EN -> two jobs (duplicates ignored), text normalised', created.status === 201 && created.data.jobs.length === 2 && created.data.jobs[0].text === 'Привет! Это тест.' && created.data.jobs.every((j) => j.status === 'queued'));
-  check('jobs enqueued, same batch', enqueued.length === 2 && created.data.jobs[0].batchId === created.data.jobs[1].batchId);
+  check('only the RU job carries the recording; EN is synthesised', db.get('avatar_jobs', created.data.jobs[0].id).recordingId === recId && db.get('avatar_jobs', created.data.jobs[1].id).recordingId === undefined);
+  check('jobs enqueued, same batch', created.data.jobs.every((j) => enqueued.includes(j.id)) && created.data.jobs[0].batchId === created.data.jobs[1].batchId);
   const done = await waitDone(owner, created.data.jobs[0].id);
   check('finished job has signed url and expiry', /sig=/.test(done.url) && !!done.expiresAt && done.progress === 100);
   const dl = await fetch(done.url);

@@ -204,6 +204,9 @@ export type AvatarLang = 'ru' | 'en' | 'de';
 export interface AvatarDraft {
   text: string;
   languages: AvatarLang[];
+  /** the owner's own Russian recording (uploaded; Russian is not synthesised) */
+  recordingId?: string;
+  recordingSeconds?: number;
 }
 
 export interface AvatarProfile {
@@ -214,7 +217,7 @@ export interface AvatarProfile {
   ready: boolean;
   photo: { width: number; height: number; updatedAt: string } | null;
   voice: { duration: number; updatedAt: string } | null;
-  limits: { textChars: number; languages: AvatarLang[]; dailyLimit: number; voiceSeconds: [number, number] };
+  limits: { textChars: number; languages: AvatarLang[]; dailyLimit: number; voiceSeconds: [number, number]; recordingSeconds: [number, number] };
 }
 
 export type AvatarJobStatus = 'queued' | 'running' | 'done' | 'failed';
@@ -226,7 +229,7 @@ export interface AvatarJob {
   language: AvatarLang;
   text: string;
   status: AvatarJobStatus;
-  stage: 'translate' | 'tts' | 'talking' | 'compose' | 'done' | null;
+  stage: 'audio' | 'translate' | 'tts' | 'talking' | 'compose' | 'done' | null;
   progress: number;
   error: string | null;
   url: string | null;

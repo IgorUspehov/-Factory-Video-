@@ -12,9 +12,18 @@ export const LANGUAGES = ['ru', 'en', 'de'];
 
 /** Shape check for the `avatar` field of a project (text draft + chosen languages). */
 export function validAvatarDraft(a) {
-  return !!a && typeof a === 'object' && typeof a.text === 'string' && a.text.length <= 1200 && Array.isArray(a.languages) && a.languages.every((l) => LANGUAGES.includes(l));
+  return (
+    !!a &&
+    typeof a === 'object' &&
+    typeof a.text === 'string' &&
+    a.text.length <= 1200 &&
+    Array.isArray(a.languages) &&
+    a.languages.every((l) => LANGUAGES.includes(l)) &&
+    (a.recordingId === undefined || (typeof a.recordingId === 'string' && a.recordingId.length <= 80)) &&
+    (a.recordingSeconds === undefined || (typeof a.recordingSeconds === 'number' && a.recordingSeconds >= 0 && a.recordingSeconds <= 600))
+  );
 }
-export const LIMITS = { textChars: 1200, photoBytes: 12 * 1024 * 1024, voiceBytes: 10 * 1024 * 1024, voiceSeconds: [3, 12], photoMinWidth: 400, photoRatio: [1.3, 1.85], photoMaxWidth: 1024 };
+export const LIMITS = { textChars: 1200, photoBytes: 12 * 1024 * 1024, voiceBytes: 10 * 1024 * 1024, voiceSeconds: [3, 12], recordingBytes: 40 * 1024 * 1024, recordingSeconds: [2, 60], photoMinWidth: 400, photoRatio: [1.3, 1.85], photoMaxWidth: 1024 };
 const PHOTO_EXT = new Set(['.png', '.jpg', '.jpeg', '.webp']);
 const VOICE_EXT = new Set(['.wav', '.mp3', '.m4a', '.ogg', '.webm']);
 
@@ -65,7 +74,7 @@ export function registerAvatarRoutes(app, { db, auth, withUpload, queue }) {
     ready: !!(p?.photoKey && p?.voiceKey),
     photo: p?.photoKey ? { width: p.photoWidth, height: p.photoHeight, updatedAt: p.photoAt } : null,
     voice: p?.voiceKey ? { duration: p.voiceDuration, updatedAt: p.voiceAt } : null,
-    limits: { textChars: LIMITS.textChars, languages: LANGUAGES, dailyLimit: config.avatar.dailyLimit, voiceSeconds: LIMITS.voiceSeconds },
+    limits: { textChars: LIMITS.textChars, languages: LANGUAGES, dailyLimit: config.avatar.dailyLimit, voiceSeconds: LIMITS.voiceSeconds, recordingSeconds: LIMITS.recordingSeconds },
   });
   const saveProfile = async (userId, fields) => {
     if (profileOf(userId)) await db.update('avatar_profiles', userId, fields);
@@ -119,6 +128,27 @@ export function registerAvatarRoutes(app, { db, auth, withUpload, queue }) {
     res.json(publicProfile(profileOf(req.user.id)));
   }));
 
+  // Russian is read in the owner's own voice: one recording per video (up to 60 s), uploaded before the job is created
+  app.put('/api/avatar/recording', ...guard, withUpload(LIMITS.recordingBytes, async (req, res) => {
+    if (!VOICE_EXT.has(path.extname(req.file.originalname).toLowerCase())) throw new HttpError(400, 'unsupported_type');
+    const info = await probe(req.file.path).catch(() => null);
+    if (!info?.audio || !info.duration) throw new HttpError(400, 'invalid_file');
+    const [min, max] = LIMITS.recordingSeconds;
+    if (info.duration < min || info.duration > max + 0.5) throw new HttpError(400, 'recording_duration');
+    const id = `avr_${randomUUID()}`;
+    const tmp = path.join(os.tmpdir(), `avatar-rec-${id}.wav`);
+    try {
+      // mono 32 kHz: close to the original quality, and 60 s stays below ~4 MB (it travels to RunPod inside the request)
+      await run(FFMPEG, ['-v', 'error', '-y', '-i', req.file.path, '-vn', '-ac', '1', '-ar', '32000', '-sample_fmt', 's16', tmp]);
+      const key = `avatar/${req.user.id}/${id}.wav`;
+      await storage.put(key, tmp);
+      await db.insert('avatar_recordings', { id, userId: req.user.id, key, duration: Math.round(info.duration * 10) / 10, createdAt: new Date().toISOString() });
+      res.status(201).json({ id, duration: Math.round(info.duration * 10) / 10 });
+    } finally {
+      await rm(tmp, { force: true });
+    }
+  }));
+
   // the photo is private: served only to its owner, with the token
   app.get('/api/avatar/photo', ...guard, wrap(async (req, res) => {
     const p = profileOf(req.user.id);
@@ -140,15 +170,21 @@ export function registerAvatarRoutes(app, { db, auth, withUpload, queue }) {
       const project = db.get('projects', projectId);
       if (!project || project.userId !== req.user.id) throw new HttpError(404, 'not_found');
     }
+    // Russian = the owner's own recording; English/German = cloned voice (needs the voice sample)
+    const recordingId = req.body?.recordingId == null ? null : String(req.body.recordingId);
+    if (languages.includes('ru')) {
+      const rec = recordingId ? db.get('avatar_recordings', recordingId) : null;
+      if (!rec || rec.userId !== req.user.id) throw new HttpError(400, 'recording_required');
+    }
     const p = profileOf(req.user.id);
-    if (!p?.photoKey || !p?.voiceKey) throw new HttpError(409, 'profile_incomplete');
+    if (!p?.photoKey || (languages.some((l) => l !== 'ru') && !p?.voiceKey)) throw new HttpError(409, 'profile_incomplete');
     const since = Date.now() - 86_400_000;
     const used = db.find('avatar_jobs', (j) => j.userId === req.user.id && new Date(j.createdAt).getTime() > since).length;
     if (used + languages.length > config.avatar.dailyLimit) throw new HttpError(429, 'daily_limit', `Limit: ${config.avatar.dailyLimit} videos per 24 h`);
     const batchId = `avb_${randomUUID()}`;
     const jobs = [];
     for (const language of languages) {
-      const job = { id: `avj_${randomUUID()}`, batchId, projectId, userId: req.user.id, language, text, status: 'queued', stage: null, progress: 0, createdAt: new Date().toISOString() };
+      const job = { id: `avj_${randomUUID()}`, batchId, projectId, userId: req.user.id, language, ...(language === 'ru' ? { recordingId } : {}), text, status: 'queued', stage: null, progress: 0, createdAt: new Date().toISOString() };
       await db.insert('avatar_jobs', job);
       jobs.push(job);
     }

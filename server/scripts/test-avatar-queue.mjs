@@ -106,6 +106,42 @@ try {
   const long = await finish('j-long');
   check('long text split into chunks <= 280', long.status === 'done' && calls.tts.length >= 3 && calls.tts.every((t) => t.chars <= 280), `${calls.tts.length} chunks`);
 
+  // 3b) own recording (RU): no translation, no synthesis, silence cut at both ends, subtitles share the speech
+  await sh(FFMPEG, ['-v', 'error', '-y', '-f', 'lavfi', '-i', 'anullsrc=r=44100:cl=mono', '-f', 'lavfi', '-i', 'sine=frequency=300:sample_rate=44100:duration=3', '-filter_complex', '[0:a]atrim=duration=1.2,asplit=2[a1][a2];[a1][1:a][a2]concat=n=3:v=0:a=1[a]', '-map', '[a]', path.join(src, 'rec.wav')]);
+  await storage.put('avatar/u1/rec1.wav', path.join(src, 'rec.wav'));
+  await db.insert('avatar_recordings', { id: 'avr_1', userId: 'u1', key: 'avatar/u1/rec1.wav', duration: 5.4 });
+  const before = { tts: calls.tts.length, translate: calls.translate.length, submit: calls.submit };
+  q.enqueue(await newJob('j-rec', 'ru', { recordingId: 'avr_1', text: 'Привет! Это моя настоящая запись, без синтеза.' }));
+  const rec = await finish('j-rec');
+  check('own recording: job done without translation or synthesis', rec.status === 'done' && calls.tts.length === before.tts && calls.translate.length === before.translate, rec.error ?? '');
+  check('own recording: exactly one RunPod submission', calls.submit === before.submit + 1 && rec.runpodId === `rp-${calls.submit}`);
+  const sentInfo = await probe(path.join(root, 'sent.wav'));
+  check('silence is cut before sending: 3 s of speech + 0.5 s of room', Math.abs(sentInfo.duration - 3.5) < 0.25 && !!sentInfo.audio, `${sentInfo.duration.toFixed(2)} s sent`);
+  check('subtitles get the speech part only', rec.chunks.length === 1 && Math.abs(rec.chunks[0].start - 0.2) < 0.05 && Math.abs(rec.chunks[0].duration - 3) < 0.2, JSON.stringify(rec.chunks[0]));
+  const recReel = await probe(await storage.localPath(rec.key));
+  check('own recording: reel is 1080x1920 and as long as the trimmed audio', recReel.video?.width === 1080 && Math.abs(recReel.duration - sentInfo.duration) < 0.3, `${recReel.duration.toFixed(2)} s`);
+
+  // 3c) RU needs no voice sample (profile with a photo only); EN still does
+  await db.insert('avatar_profiles', { id: 'u2', photoKey: 'avatar/u1/photo.png' });
+  await db.insert('avatar_recordings', { id: 'avr_2', userId: 'u2', key: 'avatar/u1/rec1.wav', duration: 5.4 });
+  const s2 = calls.submit;
+  q.enqueue(await newJob('j-ru-novoice', 'ru', { userId: 'u2', recordingId: 'avr_2' }));
+  check('RU with own recording works without a voice sample', (await finish('j-ru-novoice')).status === 'done' && calls.submit === s2 + 1);
+  q.enqueue(await newJob('j-en-novoice', 'en', { userId: 'u2' }));
+  const noVoice = await finish('j-en-novoice');
+  check('EN without a voice sample -> failed profile_incomplete, nothing submitted', noVoice.error === 'profile_incomplete' && calls.submit === s2 + 1);
+
+  // 3d) broken recordings fail early and cost nothing
+  q.enqueue(await newJob('j-rec-missing', 'ru', { recordingId: 'avr_gone' }));
+  const missing = await finish('j-rec-missing');
+  check('missing recording -> failed recording_missing, nothing submitted', missing.error === 'recording_missing' && calls.submit === s2 + 1 && !missing.runpodId);
+  await sh(FFMPEG, ['-v', 'error', '-y', '-f', 'lavfi', '-i', 'anullsrc=r=44100:cl=mono', '-t', '4', path.join(src, 'silent.wav')]);
+  await storage.put('avatar/u1/silent.wav', path.join(src, 'silent.wav'));
+  await db.insert('avatar_recordings', { id: 'avr_silent', userId: 'u1', key: 'avatar/u1/silent.wav', duration: 4 });
+  q.enqueue(await newJob('j-rec-silent', 'ru', { recordingId: 'avr_silent' }));
+  const silent = await finish('j-rec-silent');
+  check('silent recording -> failed recording_silent, nothing submitted', silent.error === 'recording_silent' && calls.submit === s2 + 1);
+
   // 4) restart while RunPod is working: only polls, never submits again, no TTS
   const submits = calls.submit;
   const ttsBefore = calls.tts.length;

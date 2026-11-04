@@ -275,8 +275,8 @@ Renderzeiten und Speicher auf Render: **UNKNOWN** (abhängig vom Instanztyp).
 3. Etappe 4: Polar (Credits/Abo, Webhooks), Checkout und Portal statt 501.
 4. Parallaxe und Effekte auf Render messen (0,5 CPU, 512 MB).
 5. Etappe 5: Integration mit Website-SDK (webstudio-sdk-muenchen.com) über API.
-6. Avatar, RU mit eigener Stimme: Feld zum Hochladen einer eigenen Aufnahme (höchstens 60 s) für RU-Videos; die Stimmsynthese für RU entfällt. Offen für den Eigentümer: wie die Untertitel zur eigenen Aufnahme getaktet werden (proportional zur Länge oder per Spracherkennung) — **UNKNOWN**.
-7. Avatar, Untertitel: größer und fett, 2–4 Wörter je Zeile (`server/src/avatar/subtitles.js`, `text.js`; Inter 700 liegt in `server/fonts`).
+6. ✔ Avatar, RU mit eigener Stimme (2026-11-04): Aufnahme hochladen (2–60 s), Stille am Rand wird abgeschnitten, RU ohne Synthese und ohne Stimmprobe. Untertitel zur Aufnahme: proportional zu Länge und Satzpausen (Annahme des Ausführenden, kein Spracherkennen) — Eigentümer bestätigt oder wünscht Spracherkennung; echter Lauf mit RunPod und Größenlimit bei 60 s **UNKNOWN**.
+7. ✔ Avatar, Untertitel (2026-11-04): größer (≈ 9,4 % der Breite) und fett, 2–4 Wörter je Zeile.
 8. Avatar, Video von 60 s auf Render prüfen (512 MB): Speicherspitze des Zusammenbaus 1080×1920, Gesamtzeit, Länge/Preis bei InfiniteTalk — gemessen nur bis 38,8 s ($0,25), maximale Audiolänge **UNKNOWN**.
 9. Avatar, offen: Replicate-Konto mit mehr Guthaben (sonst 429-Drosselung, Videos dauern länger); die Abbuchung bei RunPod von 0,25 $ nach 23:15 am 2026-11-03 ist keinem Auftrag zugeordnet — in der RunPod-Konsole prüfen (**UNKNOWN**); Aufnahme der Stimme im Browser (optional).
 10. Offen: Schriftauswahl im Frontend auf die 4 Render-Schriften begrenzen oder weitere TTF ergänzen (Entscheidung Eigentümer); Bibliotheks-`bpm`/`duration` durch Messwerte ersetzen (Entscheidung Eigentümer).
@@ -554,8 +554,8 @@ Render times and memory on Render: **UNKNOWN** (depend on the instance type).
 3. Stage 4: Polar (credits/subscription, webhooks), checkout and portal instead of 501.
 4. Measure parallax and effects on Render (0.5 CPU, 512 MB).
 5. Stage 5: integration with Website-SDK (webstudio-sdk-muenchen.com) via API.
-6. Avatar, RU with the own voice: a field to upload an own recording (at most 60 s) for RU videos; voice synthesis for RU is dropped. Open for the owner: how the subtitles are timed against the own recording (proportional to the length or by speech recognition) — **UNKNOWN**.
-7. Avatar, subtitles: larger and bold, 2–4 words per line (`server/src/avatar/subtitles.js`, `text.js`; Inter 700 is in `server/fonts`).
+6. ✔ Avatar, RU with the own voice (2026-11-04): upload a recording (2–60 s), silence at the edges is cut, RU without synthesis and without a voice sample. Subtitles against the recording: proportional to length and sentence pauses (the executor's assumption, no speech recognition) — the owner confirms or asks for speech recognition; a real RunPod run and the size limit at 60 s **UNKNOWN**.
+7. ✔ Avatar, subtitles (2026-11-04): larger (≈ 9.4 % of the width) and bold, 2–4 words per line.
 8. Avatar, check a 60 s video on Render (512 MB): memory peak of the 1080×1920 composition, total time, InfiniteTalk length/price — measured only up to 38.8 s ($0.25), maximum audio length **UNKNOWN**.
 9. Avatar, open: a Replicate account with more credit (otherwise 429 throttling and slower videos); the RunPod charge of $0.25 after 23:15 on 2026-11-03 is not matched to a job — check in the RunPod console (**UNKNOWN**); recording the voice in the browser (optional).
 10. Open: limit the frontend font choice to the 4 render fonts or add more TTFs (owner's decision); replace the library `bpm`/`duration` with measured values (owner's decision).
@@ -833,8 +833,8 @@ VITE_API_URL=http://localhost:8080 npm run dev
 3. Этап 4: Polar (кредиты/подписка, вебхуки), checkout и портал вместо 501.
 4. Замерить параллакс и эффекты на Render (0,5 CPU, 512 МБ).
 5. Этап 5: интеграция с Website-SDK (webstudio-sdk-muenchen.com) через API.
-6. Аватар, RU своим голосом: поле для загрузки своей записи (не более 60 с) для видео RU; синтез голоса для RU убирается. Открыто для владельца: как привязывать субтитры к своей записи (пропорционально длине или распознаванием речи) — **UNKNOWN**.
-7. Аватар, субтитры: крупнее и жирнее, 2–4 слова в строке (`server/src/avatar/subtitles.js`, `text.js`; Inter 700 лежит в `server/fonts`).
+6. ✔ Аватар, RU своим голосом (2026-11-04): загрузка записи (2–60 с), тишина по краям обрезается, RU без синтеза и без образца голоса. Субтитры к записи: пропорционально длине и паузам после предложений (допущение исполнителя, без распознавания речи) — владелец подтверждает или просит распознавание речи; настоящий прогон через RunPod и лимит размера при 60 с **UNKNOWN**.
+7. ✔ Аватар, субтитры (2026-11-04): крупнее (≈ 9,4 % ширины) и жирнее, 2–4 слова в строке.
 8. Аватар, проверить ролик в 60 с на Render (512 МБ): пик памяти сборки 1080×1920, общее время, длина/цена у InfiniteTalk — измерено только до 38,8 с ($0,25), максимальная длина аудио **UNKNOWN**.
 9. Аватар, открыто: аккаунт Replicate с большим балансом (иначе ограничение 429 и более долгие ролики); списание $0,25 в RunPod после 23:15 2026-11-03 не сопоставлено с заданием — проверить в консоли RunPod (**UNKNOWN**); запись голоса в браузере (по желанию).
 10. Открыто: ограничить выбор шрифтов во фронтенде четырьмя шрифтами рендера или добавить TTF (решение владельца); заменить `bpm`/`duration` библиотеки измеренными значениями (решение владельца).

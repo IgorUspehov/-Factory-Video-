@@ -22,7 +22,11 @@ const ERROR_CODES = new Set([
   'daily_limit',
   'avatar_not_configured',
   'forbidden',
+  'recording_required',
+  'recording_duration',
 ]);
+/** failure reasons of a job that have a friendly text */
+const JOB_ERRORS = new Set(['recording_silent', 'recording_missing', 'tts_rate_limited', 'talking_timeout', 'profile_incomplete']);
 const isActive = (j: AvatarJob) => j.status === 'queued' || j.status === 'running';
 const POLL_MS = 4000;
 
@@ -32,20 +36,21 @@ export function AvatarPanel() {
   const draft: AvatarDraft = project.avatar ?? { text: '', languages: ['ru'] };
 
   const [profile, setProfile] = useState<AvatarProfile | null>(null);
-  const [busy, setBusy] = useState<'photo' | 'voice' | 'create' | null>(null);
+  const [busy, setBusy] = useState<'photo' | 'voice' | 'recording' | 'create' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [jobs, setJobs] = useState<AvatarJob[]>([]);
   const [copied, setCopied] = useState<string | null>(null);
   const photoInput = useRef<HTMLInputElement>(null);
   const voiceInput = useRef<HTMLInputElement>(null);
+  const recordingInput = useRef<HTMLInputElement>(null);
   const results = useRef<HTMLElement>(null);
 
   const errorText = useCallback(
     (err: unknown): string => {
       const code = err instanceof ApiError ? err.message : '';
       if (!ERROR_CODES.has(code)) return t('avatar.errors.generic');
-      const [min, max] = profile?.limits.voiceSeconds ?? [3, 12];
+      const [min, max] = (code === 'recording_duration' ? profile?.limits.recordingSeconds : profile?.limits.voiceSeconds) ?? (code === 'recording_duration' ? [2, 60] : [3, 12]);
       return t(`avatar.errors.${code}` as TKey, { min, max });
     },
     [t, profile],
@@ -93,14 +98,19 @@ export function AvatarPanel() {
     return () => window.clearInterval(id);
   }, [anyActive, loadJobs]);
 
-  const upload = (kind: 'photo' | 'voice') => async (e: ChangeEvent<HTMLInputElement>) => {
+  const upload = (kind: 'photo' | 'voice' | 'recording') => async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = '';
     if (!file) return;
     setBusy(kind);
     setError(null);
     try {
-      setProfile(await (kind === 'photo' ? api.avatarUploadPhoto(file) : api.avatarUploadVoice(file)));
+      if (kind === 'recording') {
+        const rec = await api.avatarUploadRecording(file);
+        update((p) => ({ avatar: { ...(p.avatar ?? { text: '', languages: ['ru'] }), recordingId: rec.id, recordingSeconds: rec.duration } }));
+      } else {
+        setProfile(await (kind === 'photo' ? api.avatarUploadPhoto(file) : api.avatarUploadVoice(file)));
+      }
     } catch (err) {
       setError(errorText(err));
     } finally {
@@ -116,13 +126,23 @@ export function AvatarPanel() {
 
   const maxChars = profile?.limits.textChars ?? 1200;
   const text = draft.text.trim();
-  const canCreate = !!profile?.ready && profile.configured && text.length > 0 && draft.languages.length > 0 && busy === null;
+  // Russian is read from the owner's own recording; English and German are synthesised with the cloned voice
+  const needsRecording = draft.languages.includes('ru');
+  const needsVoice = draft.languages.some((l) => l !== 'ru');
+  const canCreate =
+    !!profile?.configured &&
+    !!profile.hasPhoto &&
+    (!needsVoice || profile.hasVoice) &&
+    (!needsRecording || !!draft.recordingId) &&
+    text.length > 0 &&
+    draft.languages.length > 0 &&
+    busy === null;
 
   const create = async () => {
     setBusy('create');
     setError(null);
     try {
-      const res = await api.avatarCreateJobs({ projectId: project.id, text, languages: draft.languages });
+      const res = await api.avatarCreateJobs({ projectId: project.id, text, languages: draft.languages, recordingId: needsRecording ? draft.recordingId : undefined });
       setJobs((prev) => [...res.jobs, ...prev]);
       // the list sits below the form: bring the progress into view
       window.setTimeout(() => results.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
@@ -226,6 +246,26 @@ export function AvatarPanel() {
         <p className="text-xs text-muted">{t('avatar.languages.hint')}</p>
       </section>
 
+      {needsRecording && (
+        <section className="space-y-3">
+          <div className="label-caps">{t('avatar.recording.title')}</div>
+          <div className="card flex items-start gap-4 p-4">
+            <span className="icon-tile h-12 w-12 shrink-0">
+              <Mic size={20} />
+            </span>
+            <div className="min-w-0 flex-1 space-y-2">
+              <p className="text-sm font-semibold">{draft.recordingId ? t('avatar.recording.uploaded', { n: draft.recordingSeconds ?? 0 }) : t('avatar.recording.missing')}</p>
+              <p className="text-xs text-muted">{t('avatar.recording.hint', { max: profile?.limits.recordingSeconds[1] ?? 60 })}</p>
+              <button className="btn-secondary btn-sm" disabled={busy !== null} onClick={() => recordingInput.current?.click()}>
+                {busy === 'recording' ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
+                {busy === 'recording' ? t('avatar.recording.uploading') : draft.recordingId ? t('avatar.recording.replace') : t('avatar.recording.upload')}
+              </button>
+              <input ref={recordingInput} type="file" accept="audio/*,.wav,.mp3,.m4a,.ogg,.webm" className="hidden" onChange={upload('recording')} />
+            </div>
+          </div>
+        </section>
+      )}
+
       <section className="space-y-3">
         <button className="btn-primary w-full py-3.5 text-base" disabled={!canCreate} onClick={() => void create()}>
           {busy === 'create' ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
@@ -261,7 +301,7 @@ export function AvatarPanel() {
             )}
             {j.status === 'failed' && (
               <div className="space-y-2">
-                {j.error && <p className="break-words text-xs text-muted">{j.error.slice(0, 160)}</p>}
+                {j.error && <p className="break-words text-xs text-muted">{JOB_ERRORS.has(j.error.split(':')[0].trim()) ? t(`avatar.jobs.errors.${j.error.split(':')[0].trim()}` as TKey) : j.error.slice(0, 160)}</p>}
                 <button className="btn-secondary btn-sm" onClick={() => void retry(j.id)}>
                   <RefreshCw size={14} /> {t('avatar.jobs.retry')}
                 </button>

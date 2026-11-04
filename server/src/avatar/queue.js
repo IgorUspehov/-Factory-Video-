@@ -1,8 +1,8 @@
-import { readFile, rm } from 'node:fs/promises';
+import { mkdir, readFile, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { withHeavyLock } from '../heavy.js';
 import { probe } from '../media.js';
-import { concatWav } from './audio.js';
+import { concatWav, trimToSpeech } from './audio.js';
 import { composeReel } from './compose.js';
 import { sleep } from './http.js';
 import { splitForTts } from './text.js';
@@ -44,12 +44,28 @@ export function createAvatarQueue({ db, storage, workRoot, translator, tts, talk
     const started = Date.now();
     await patch(job, { status: 'running', startedAt: job.startedAt ?? new Date().toISOString(), error: undefined });
     try {
+      await mkdir(workDir, { recursive: true });
       const profile = db.get('avatar_profiles', job.userId);
-      if (!profile?.photoKey || !profile?.voiceKey) throw new Error('profile_incomplete');
+      // the voice sample is only needed when the voice is synthesised; a job with the owner's own recording does not use it
+      if (!profile?.photoKey || (!job.recordingId && !profile?.voiceKey)) throw new Error('profile_incomplete');
 
-      // ---- text: translate (cached in the row), then split into TTS chunks
       let chunks = job.chunks;
-      if (!job.runpodId) {
+      if (!job.runpodId && job.recordingId) {
+        // ---- the owner's own recording (RU): no translation, no synthesis; silence at both ends is cut
+        await stage(job, 'audio', 10);
+        const rec = db.get('avatar_recordings', job.recordingId);
+        if (!rec || rec.userId !== job.userId) throw new Error('recording_missing');
+        const t = await trimToSpeech(await storage.localPath(rec.key), path.join(workDir, 'voice.wav'));
+        if (!job.text?.trim()) throw new Error('empty_text');
+        // the subtitles share the speech part of the recording
+        chunks = [{ text: job.text, duration: t.speech, start: t.lead }];
+        await stage(job, 'talking', 26);
+        const photo = await dataUri(await storage.localPath(profile.photoKey));
+        const runpodId = await talk.submit({ image: photo, audio: await dataUri(t.file) });
+        await patch(job, { runpodId, chunks, audioSeconds: t.duration, submittedAt: new Date().toISOString() });
+        job.runpodId = runpodId;
+      } else if (!job.runpodId) {
+        // ---- text: translate (cached in the row), then split into TTS chunks
         await stage(job, 'translate', 5);
         let text = job.language === 'ru' ? job.text : job.translatedText;
         if (!text) {
@@ -84,7 +100,7 @@ export function createAvatarQueue({ db, storage, workRoot, translator, tts, talk
 
       // ---- wait for RunPod (also the resume path after a restart)
       await stage(job, 'talking', 26);
-      const seconds = chunks.reduce((n, c) => n + c.duration, 0);
+      const seconds = job.audioSeconds ?? chunks.reduce((n, c) => n + c.duration, 0);
       const expectedMs = Math.max(60_000, seconds * 12_000);
       const waitFrom = job.submittedAt ? new Date(job.submittedAt).getTime() : Date.now();
       let netErrors = 0;

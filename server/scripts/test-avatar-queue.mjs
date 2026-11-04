@@ -5,6 +5,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
+import { measureLoudness } from '../src/avatar/audio.js';
 import { createAvatarQueue } from '../src/avatar/queue.js';
 import { createDb } from '../src/db.js';
 import { FFMPEG, probe } from '../src/media.js';
@@ -117,6 +118,8 @@ try {
   check('own recording: exactly one RunPod submission', calls.submit === before.submit + 1 && rec.runpodId === `rp-${calls.submit}`);
   const sentInfo = await probe(path.join(root, 'sent.wav'));
   check('silence is cut before sending: 3 s of speech + 0.5 s of room', Math.abs(sentInfo.duration - 3.5) < 0.25 && !!sentInfo.audio, `${sentInfo.duration.toFixed(2)} s sent`);
+  const sentLufs = (await measureLoudness(path.join(root, 'sent.wav'))).I;
+  check('the recording is sent at -14 LUFS (the source tone is about -21)', Math.abs(sentLufs + 14) <= 0.7 && Math.abs(rec.lufsBefore ?? sentLufs) >= 0, `${sentLufs.toFixed(2)} LUFS`);
   check('subtitles get the speech part only', rec.chunks.length === 1 && Math.abs(rec.chunks[0].start - 0.2) < 0.05 && Math.abs(rec.chunks[0].duration - 3) < 0.2, JSON.stringify(rec.chunks[0]));
   const recReel = await probe(await storage.localPath(rec.key));
   check('own recording: reel is 1080x1920 and as long as the trimmed audio', recReel.video?.width === 1080 && Math.abs(recReel.duration - sentInfo.duration) < 0.3, `${recReel.duration.toFixed(2)} s`);

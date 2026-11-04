@@ -41,6 +41,22 @@ const CLAUSE_END = /[.,!?;:…—–]["»”)]*$/;
 const SENTENCE_END = /[.!?…]["»”)]*$/;
 
 /**
+ * Short function words (prepositions, conjunctions, articles, particles) that must not stand last on a subtitle line.
+ * Russian, English and German together: a line is never read in one language only, and the sets hardly overlap in meaning.
+ */
+const SHORT_WORDS = new Set([
+  // Russian
+  'в', 'во', 'с', 'со', 'к', 'ко', 'о', 'об', 'обо', 'у', 'за', 'из', 'изо', 'от', 'до', 'по', 'на', 'над', 'под', 'при', 'про', 'для', 'без', 'через', 'между', 'перед',
+  'и', 'а', 'но', 'да', 'или', 'что', 'чтобы', 'как', 'если', 'то', 'же', 'ли', 'не', 'ни', 'бы',
+  // English
+  'a', 'an', 'the', 'to', 'of', 'in', 'on', 'at', 'by', 'for', 'from', 'with', 'and', 'or', 'but', 'so', 'as', 'if', 'than', 'that', 'into', 'about',
+  // German
+  'der', 'die', 'das', 'den', 'dem', 'des', 'ein', 'eine', 'einen', 'einem', 'einer', 'und', 'oder', 'aber', 'im', 'am', 'auf', 'mit', 'zu', 'zum', 'zur', 'von', 'vom', 'für', 'bei', 'nach', 'aus', 'über', 'unter', 'um', 'wenn', 'dass', 'wie',
+]);
+const isShortWord = (w) => !!w && !CLAUSE_END.test(w) && SHORT_WORDS.has(w.toLowerCase().replace(/^["«„“(]+|["»”)]+$/g, ''));
+const endsOnShortWord = (line) => isShortWord(line[line.length - 1]);
+
+/**
  * Subtitle lines of 2–4 words (a lone word only when nothing else can be joined to it).
  * Breaks prefer punctuation; one-word clauses join a neighbour; a long clause is cut into lines of equal length.
  */
@@ -77,9 +93,44 @@ export function splitPhrases(text, maxWords = 4) {
       at += size;
     }
   }
-  // a lone word after a longer line: borrow that line's last word (2 + 2 beats 3 + 1)
-  for (let i = 1; i < lines.length; i++) {
-    if (lines[i].length === 1 && lines[i - 1].length >= 3) lines[i].unshift(lines[i - 1].pop());
+  // Two repairs, repeated until nothing changes (each can create work for the other):
+  //  - a line never ends on a short function word (в, с, и, но, the, und …): that word moves to the next line;
+  //  - a lone word after a longer line borrows that line's last word (2 + 2 beats 3 + 1).
+  // Guard: text made only of short words can never satisfy the rule — give up after a bounded number of moves
+  // and keep the plain even split.
+  const plain = lines.map((l) => [...l]);
+  let budget = words.length * 4 + 8;
+  repair: for (let round = 0; round < 12; round++) {
+    let changed = false;
+    for (let i = 0; i < lines.length - 1; i++) {
+      while (lines[i].length > 0 && endsOnShortWord(lines[i])) {
+        const moved = lines[i].length > 2 ? [lines[i].pop()] : lines[i].splice(0); // a leftover single word would be a bad line: move both
+        lines[i + 1].unshift(...moved);
+        changed = true;
+        if (--budget < 0) {
+          lines.splice(0, lines.length, ...plain);
+          break repair;
+        }
+      }
+      while (lines[i + 1].length > maxWords) {
+        const w = lines[i + 1].pop();
+        if (lines[i + 2]) lines[i + 2].unshift(w);
+        else lines.push([w]);
+        changed = true;
+        if (--budget < 0) {
+          lines.splice(0, lines.length, ...plain);
+          break repair;
+        }
+      }
+    }
+    for (let i = lines.length - 1; i >= 0; i--) if (lines[i].length === 0) lines.splice(i, 1);
+    for (let i = 1; i < lines.length; i++) {
+      if (lines[i].length === 1 && lines[i - 1].length >= 3 && !isShortWord(lines[i - 1][lines[i - 1].length - 2])) {
+        lines[i].unshift(lines[i - 1].pop());
+        changed = true;
+      }
+    }
+    if (!changed) break;
   }
   return lines.map((l) => l.join(' '));
 }

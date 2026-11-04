@@ -5,7 +5,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import { speechSpan, trimToSpeech } from '../src/avatar/audio.js';
+import { measureLoudness, speechSpan, trimToSpeech } from '../src/avatar/audio.js';
 import { buildAvatarAss, subtitleLines } from '../src/avatar/subtitles.js';
 import { splitPhrases } from '../src/avatar/text.js';
 import { FFMPEG, probe } from '../src/media.js';
@@ -30,10 +30,37 @@ for (const [i, t] of samples.entries()) {
 }
 check('one-word sentence stays as it is', JSON.stringify(splitPhrases('Да.')) === '["Да."]');
 check('a short interjection joins the next clause', splitPhrases('Привет! Меня зовут Игорь.')[0] === 'Привет! Меня зовут Игорь.');
-check('long clause is cut evenly (9 words -> 3+3+3)', splitPhrases('а б в г д е ж з и').map(words).join() === '3,3,3');
+check('long clause is cut evenly (9 words -> 3+3+3)', splitPhrases('раз два три четыре пять шесть семь восемь девять').map(words).join() === '3,3,3');
 check('5 words -> 3+2, never 4+1', splitPhrases('раз два три четыре пять').map(words).join() === '3,2');
 check('breaks prefer punctuation', splitPhrases('Первая часть, вторая часть').join('|') === 'Первая часть,|вторая часть');
 check('empty text -> no lines', splitPhrases('   ').length === 0);
+
+// ---- no line ends on a short function word (в, с, к, и, а, но, на …) — it moves to the next line
+const WEAK = new Set(['в', 'во', 'с', 'со', 'к', 'ко', 'о', 'об', 'у', 'за', 'из', 'от', 'до', 'по', 'на', 'при', 'про', 'для', 'без', 'и', 'а', 'но', 'да', 'или', 'что', 'как', 'если', 'то', 'не', 'a', 'an', 'the', 'to', 'of', 'in', 'on', 'at', 'for', 'with', 'and', 'or', 'but', 'und', 'oder', 'aber', 'in', 'mit', 'zu', 'von', 'für', 'auf', 'der', 'die', 'das']);
+const lastWord = (l) => l.split(' ').at(-1);
+const endsWeak = (l) => WEAK.has(lastWord(l).toLowerCase());
+const weakTexts = [
+  'Привет! Меня зовут Игорь. Я делаю сайты и системы учёта клиентов для местного бизнеса в Мюнхене.',
+  'Если у вас кафе, мастерская или небольшая клиника, то сайт с онлайн-записью помогает получать новых клиентов каждый день, даже когда вы заняты.',
+  'Я иду в магазин, а потом к другу на дачу и по дороге купил хлеб с маслом для всех.',
+  'Мы делаем сайт для кафе и для клиники, но не для всех и не на любой срок работы.',
+  'Hi, I am Ihor, and I build websites for local businesses in the center of Munich and in the area.',
+  'Ich entwickle Websites und Kundenverwaltungssysteme für lokale Unternehmen in München und der Umgebung mit Herz.',
+];
+for (const [i, t] of weakTexts.entries()) {
+  const ls = splitPhrases(t);
+  const bad = ls.slice(0, -1).filter(endsWeak);
+  check(`text ${i + 1}: no line (except the last) ends on a short word`, bad.length === 0, bad.length ? JSON.stringify(bad) : '');
+  check(`text ${i + 1}: still 2–4 words per line, nothing lost`, ls.every((l) => words(l) >= 2 && words(l) <= 4) && ls.join(' ') === t.replace(/\s+/g, ' ').trim(), ls.map(words).join(','));
+}
+// "и не на любой срок." cannot be split into lines of 2–4 words that avoid ending on a short word: the short-word rule wins
+const tail = splitPhrases('Мы делаем сайт для кафе и для клиники, но не для всех и не на любой срок.');
+check('unsolvable tail: the short-word rule wins over the 2-word minimum, nothing is lost', tail.slice(0, -1).every((l) => !endsWeak(l)) && tail.every((l) => words(l) <= 4) && tail.join(' ') === 'Мы делаем сайт для кафе и для клиники, но не для всех и не на любой срок.', JSON.stringify(tail.slice(-2)));
+check('the short word starts the next line', JSON.stringify(splitPhrases('Я делаю сайты и системы учёта клиентов для местного бизнеса.')) === JSON.stringify(['Я делаю сайты', 'и системы учёта клиентов', 'для местного бизнеса.']));
+check('a word with punctuation after it is a real clause end and stays', splitPhrases('Привет, и, конечно, да.').every((l) => l.length > 0) && splitPhrases('Он ушёл, а я остался дома.')[0] === 'Он ушёл,');
+check('a two-word line ending on a short word moves as a whole (no 1-word leftover)', !splitPhrases('Он идёт к другу домой пешком быстро').some((l) => words(l) === 1));
+check('the final line may end on a short word (nothing to move it to)', splitPhrases('Это был наш дом и').at(-1).endsWith('и'));
+check('a short word is only moved, never dropped or duplicated', (() => { const t = 'Я в и на за с'; return splitPhrases(t).join(' ') === t; })());
 
 // ---- timing
 const chunks = [{ text: 'Привет! Меня зовут Игорь. Я делаю сайты.', duration: 6, start: 1 }];
@@ -65,6 +92,26 @@ try {
   const t = await trimToSpeech(f, path.join(dir, 'trim.wav'));
   const info = await probe(t.file);
   check('trimmed file: mono, shorter, speech inside with a little room', info.duration < 8 && Math.abs(info.duration - (5.8 + 0.5)) < 0.3 && Math.abs(t.lead - 0.2) < 0.01 && Math.abs(t.speech - 5.8) < 0.2, `${info.duration.toFixed(2)} s, lead ${t.lead.toFixed(2)}, speech ${t.speech.toFixed(2)}`);
+  // ---- loudness: every recording ends up at -14 LUFS, quiet ones are raised, loud ones lowered
+  // speech-like test signal: noise in the voice band (≤ 4 kHz), modulated like syllables (4 Hz), with silence around it
+  const noise = async (name, amp) => {
+    const f = path.join(dir, name);
+    const voice = (d) => `anoisesrc=color=pink:amplitude=${amp}:sample_rate=44100:duration=${d},lowpass=f=4000,tremolo=f=4:d=0.7`;
+    await sh(FFMPEG, ['-v', 'error', '-y', '-f', 'lavfi', '-i', 'anullsrc=r=44100:cl=mono', '-f', 'lavfi', '-i', voice(3), '-f', 'lavfi', '-i', voice(2),
+      '-filter_complex', '[0:a]atrim=duration=1,asplit=3[s1][s2][s3];[s1][1:a][s2][2:a][s3]concat=n=5:v=0:a=1[a]', '-map', '[a]', f]);
+    return f;
+  };
+  for (const [label, amp, expectBefore] of [['quiet (like the owner\'s -25 LUFS)', 0.3, (i) => i < -22 && i > -34], ['very quiet', 0.03, (i) => i < -40], ['loud', 0.9, (i) => i > -22]]) {
+    const f = await noise(`n-${amp}.wav`, amp);
+    const before = (await measureLoudness(f)).I;
+    const t3 = await trimToSpeech(f, path.join(dir, `n-${amp}-out.wav`));
+    const after = await measureLoudness(t3.file);
+    check(`loudness, ${label}: input measured as expected`, expectBefore(before) && Math.abs(t3.lufsBefore - before) < 1.5, `${before.toFixed(1)} LUFS`);
+    check(`loudness, ${label}: output is -14 LUFS (±0.7)`, Math.abs(after.I + 14) <= 0.7 && Math.abs(t3.lufsAfter - after.I) < 0.3, `${after.I.toFixed(2)} LUFS`);
+    check(`loudness, ${label}: true peak stays below -0.9 dBTP`, after.TP <= -0.9, `${after.TP.toFixed(2)} dBTP`);
+  }
+  const outInfo = await probe(path.join(dir, 'n-0.3-out.wav'));
+  check('normalised file is still mono 16-bit WAV at 32 kHz', outInfo.audio?.codec === 'pcm_s16le', JSON.stringify(outInfo.audio));
   const noTrim = path.join(dir, 'tight.wav');
   await sh(FFMPEG, ['-v', 'error', '-y', '-f', 'lavfi', '-i', 'sine=frequency=300:duration=4', noTrim]);
   const t2 = await trimToSpeech(noTrim, path.join(dir, 'tight2.wav'));
